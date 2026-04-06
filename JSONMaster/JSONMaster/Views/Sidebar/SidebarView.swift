@@ -8,6 +8,7 @@ struct SidebarView: View {
 
     @Binding var selectedItem: HistoryItem?
     var onCreateNew: () -> Void = {}
+    var onOpenSettings: () -> Void = {}
 
     @State private var searchText = ""
     @State private var renameTarget: HistoryItem?
@@ -65,9 +66,11 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .background(Color.sidebarBackground)
         .navigationTitle("History")
         .searchable(text: $searchText, prompt: "Search JSON")
-        .safeAreaInset(edge: .bottom) {
+        .safeAreaInset(edge: .top) {
             HStack {
                 Button {
                     onCreateNew()
@@ -77,19 +80,27 @@ struct SidebarView: View {
                 .buttonStyle(.borderless)
 
                 Spacer()
-
-                Button(role: .destructive) {
-                    clearHistory()
-                } label: {
-                    Label("Clear", systemImage: "trash")
-                }
-                .buttonStyle(.borderless)
-                .disabled(items.isEmpty)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(.bar)
+            .background(Color.sidebarBackground)
         }
+        .safeAreaInset(edge: .bottom) {
+            HStack {
+                Button {
+                    onOpenSettings()
+                } label: {
+                    Label("Settings", systemImage: "gearshape")
+                }
+                .buttonStyle(.borderless)
+
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color.sidebarBackground)
+        }
+        .background(Color.sidebarBackground)
         .alert("Rename Item", isPresented: renamePresentedBinding) {
             TextField("Title", text: $renameText)
             Button("Cancel", role: .cancel) {
@@ -173,14 +184,6 @@ struct SidebarView: View {
         }
 
         modelContext.delete(item)
-        try? modelContext.save()
-    }
-
-    private func clearHistory() {
-        items.forEach { item in
-            modelContext.delete(item)
-        }
-        selectedItem = nil
         try? modelContext.save()
     }
 }

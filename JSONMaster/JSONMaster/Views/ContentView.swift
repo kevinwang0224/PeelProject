@@ -10,9 +10,9 @@ struct ContentView: View {
         @Bindable var workspace = workspace
 
         NavigationSplitView {
-            SidebarView(selectedItem: $workspace.selectedItem) {
+            SidebarView(selectedItem: $workspace.selectedItem, onCreateNew: {
                 workspace.createNewItem()
-            }
+            })
             .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 320)
         } detail: {
             Group {
