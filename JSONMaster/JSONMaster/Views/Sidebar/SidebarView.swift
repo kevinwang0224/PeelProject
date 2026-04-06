@@ -164,17 +164,16 @@ struct SidebarView: View {
             return
         }
 
-        renameTarget.title = renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? renameTarget.rawJSON.jsonTitle
-            : renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-        renameTarget.updatedAt = Date()
+        let trimmedText = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        renameTarget.title = trimmedText.isEmpty
+            ? HistoryItem.defaultTitle(at: renameTarget.createdAt)
+            : trimmedText
         try? modelContext.save()
         self.renameTarget = nil
     }
 
     private func togglePin(for item: HistoryItem) {
         item.isPinned.toggle()
-        item.updatedAt = Date()
         try? modelContext.save()
     }
 

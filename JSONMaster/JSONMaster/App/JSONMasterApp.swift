@@ -32,10 +32,30 @@ final class JSONWorkspace {
 
     func bind(modelContext: ModelContext) {
         self.modelContext = modelContext
+        removeEmptyHistoryItems()
+        restoreSelectionIfNeeded()
     }
 
     func reloadEditorFromSelection() {
-        editorText = selectedItem?.rawJSON ?? ""
+        guard let selectedItem else {
+            editorText = ""
+            return
+        }
+
+        let rawJSON = selectedItem.rawJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !rawJSON.isEmpty {
+            editorText = selectedItem.rawJSON
+            return
+        }
+
+        let formattedJSON = selectedItem.formattedJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !formattedJSON.isEmpty {
+            editorText = selectedItem.formattedJSON
+            return
+        }
+
+        self.selectedItem = nil
+        restoreSelectionIfNeeded()
     }
 
     func createNewItem(with rawJSON: String = "{}") {
@@ -44,7 +64,7 @@ final class JSONWorkspace {
             return
         }
 
-        let title = rawJSON.isValidJSON ? rawJSON.jsonTitle : "Untitled"
+        let title = HistoryItem.defaultTitle()
         let item = HistoryItem(
             title: title,
             rawJSON: rawJSON,
@@ -66,19 +86,23 @@ final class JSONWorkspace {
         }
 
         let item = selectedItem ?? {
-            let newItem = HistoryItem(rawJSON: editorText)
+            let newItem = HistoryItem(
+                title: HistoryItem.defaultTitle(),
+                rawJSON: editorText,
+                formattedJSON: editorText.prettyJSON ?? editorText
+            )
             modelContext.insert(newItem)
             selectedItem = newItem
             return newItem
         }()
 
-        let existingTitle = item.title
-        item.rawJSON = editorText
-        item.formattedJSON = editorText.prettyJSON ?? editorText
-        item.updatedAt = Date()
+        let formattedJSON = editorText.prettyJSON ?? editorText
+        let hasChanged = item.rawJSON != editorText
 
-        if existingTitle == "Untitled" || existingTitle == "Invalid JSON" {
-            item.title = editorText.isValidJSON ? editorText.jsonTitle : "Untitled"
+        if hasChanged {
+            item.rawJSON = editorText
+            item.formattedJSON = formattedJSON
+            item.updatedAt = Date()
         }
 
         try? modelContext.save()
@@ -89,8 +113,22 @@ final class JSONWorkspace {
             return
         }
 
+        if editorText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            modelContext?.delete(selectedItem)
+            self.selectedItem = nil
+            try? modelContext?.save()
+            return
+        }
+
+        let formattedJSON = editorText.prettyJSON ?? editorText
+        let hasChanged = selectedItem.rawJSON != editorText
+
+        guard hasChanged else {
+            return
+        }
+
         selectedItem.rawJSON = editorText
-        selectedItem.formattedJSON = editorText.prettyJSON ?? editorText
+        selectedItem.formattedJSON = formattedJSON
         selectedItem.updatedAt = Date()
         try? modelContext?.save()
     }
@@ -168,9 +206,6 @@ final class JSONWorkspace {
         }
 
         createNewItem(with: contents)
-        if selectedItem?.title == "Untitled" {
-            selectedItem?.title = url.deletingPathExtension().lastPathComponent
-        }
         saveCurrent()
     }
 
@@ -198,6 +233,62 @@ final class JSONWorkspace {
         }
 
         return "JSON Export.json"
+    }
+
+    private func removeEmptyHistoryItems() {
+        guard let modelContext else {
+            return
+        }
+
+        let descriptor = FetchDescriptor<HistoryItem>()
+        if let items = try? modelContext.fetch(descriptor) {
+            let emptyItems = items.filter { item in
+                item.rawJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+
+            guard !emptyItems.isEmpty else {
+                return
+            }
+
+            emptyItems.forEach { item in
+                modelContext.delete(item)
+            }
+
+            try? modelContext.save()
+        }
+    }
+
+    private func restoreSelectionIfNeeded() {
+        guard let modelContext else {
+            return
+        }
+
+        let selectedHasContent = {
+            guard let selectedItem else {
+                return false
+            }
+
+            return !selectedItem.rawJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                !selectedItem.formattedJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }()
+
+        guard !selectedHasContent else {
+            reloadEditorFromSelection()
+            return
+        }
+
+        var descriptor = FetchDescriptor<HistoryItem>(
+            sortBy: [SortDescriptor(\HistoryItem.updatedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+
+        if let item = try? modelContext.fetch(descriptor).first {
+            selectedItem = item
+            reloadEditorFromSelection()
+        } else {
+            selectedItem = nil
+            editorText = ""
+        }
     }
 }
 

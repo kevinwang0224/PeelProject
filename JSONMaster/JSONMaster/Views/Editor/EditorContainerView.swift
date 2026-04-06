@@ -8,7 +8,10 @@ struct EditorContainerView: View {
     @State private var isValid = false
     @State private var jsonType = JSONDocument.JSONType.unknown
     @State private var keyCount = 0
-    @State private var errorMessage: String?
+    @State private var validationIssue: JSONValidationIssue?
+    @State private var toastMessage: String?
+    @State private var toastDismissTask: DispatchWorkItem?
+    @State private var errorRevealToken = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,7 +19,11 @@ struct EditorContainerView: View {
 
             Divider()
 
-            JSONTextEditor(text: $editorText)
+            JSONTextEditor(
+                text: $editorText,
+                errorHighlight: currentErrorHighlight,
+                errorRevealToken: errorRevealToken
+            )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Divider()
@@ -29,6 +36,19 @@ struct EditorContainerView: View {
             )
         }
         .background(Color.editorBackground)
+        .overlay(alignment: .topTrailing) {
+            if let toastMessage {
+                Text(toastMessage)
+                    .font(.callout.weight(.medium))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .shadow(color: .black.opacity(0.12), radius: 12, x: 0, y: 6)
+                    .padding(.top, 14)
+                    .padding(.trailing, 16)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
         .onAppear {
             syncFromSelection()
         }
@@ -43,11 +63,11 @@ struct EditorContainerView: View {
     private var toolbar: some View {
         HStack(spacing: 12) {
             toolbarButton("Format", systemImage: "text.alignleft") {
-                applyFormat(.pretty)
+                handleFormat(.pretty)
             }
 
             toolbarButton("Compact", systemImage: "arrow.down.right.and.arrow.up.left") {
-                applyFormat(.compact)
+                handleFormat(.compact)
             }
 
             toolbarButton("Copy", systemImage: "doc.on.doc") {
@@ -60,8 +80,8 @@ struct EditorContainerView: View {
 
             Spacer()
 
-            if let errorMessage, !errorMessage.isEmpty {
-                Text(errorMessage)
+            if let validationIssue {
+                Text(validationIssue.displayMessage)
                     .font(.caption)
                     .foregroundStyle(Color.errorRed)
                     .lineLimit(1)
@@ -85,20 +105,34 @@ struct EditorContainerView: View {
 
     private func syncFromSelection() {
         editorText = selectedItem?.rawJSON ?? ""
-        errorMessage = nil
         refreshStatus()
     }
 
     private func refreshStatus() {
         let document = JSONDocument(raw: editorText)
-        isValid = editorText.isEmpty ? false : editorText.isValidJSON
+        validationIssue = editorText.isEmpty ? nil : JSONFormatterService.validationIssue(editorText)
+        isValid = !editorText.isEmpty && validationIssue == nil
         jsonType = document.type
         keyCount = document.keyCount
     }
 
-    private func applyFormat(_ style: JSONFormatStyle) {
+    private var currentErrorHighlight: EditorErrorHighlight? {
+        guard let validationIssue,
+              let tokenRange = validationIssue.highlightRange(in: editorText),
+              let lineRange = validationIssue.lineRange(in: editorText) else {
+            return nil
+        }
+
+        return EditorErrorHighlight(
+            tokenRange: tokenRange,
+            lineRange: lineRange,
+            lineNumber: validationIssue.line,
+            message: validationIssue.displayMessage
+        )
+    }
+
+    private func handleFormat(_ style: JSONFormatStyle) {
         guard !editorText.isEmpty else {
-            errorMessage = nil
             refreshStatus()
             return
         }
@@ -114,9 +148,17 @@ struct EditorContainerView: View {
         switch result {
         case .success(let output):
             editorText = output
-            errorMessage = nil
+            showToast(style == .compact ? "Compacted" : "Formatted")
         case .failure(let error):
-            errorMessage = error.localizedDescription
+            if validationIssue == nil {
+                validationIssue = JSONValidationIssue(
+                    message: error.localizedDescription,
+                    line: 1,
+                    column: 1,
+                    utf16Index: 0
+                )
+            }
+            errorRevealToken += 1
         }
 
         refreshStatus()
@@ -133,11 +175,28 @@ struct EditorContainerView: View {
 
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(stringToCopy, forType: .string)
+        showToast("Copied")
     }
 
     private func clearEditor() {
         editorText = ""
-        errorMessage = nil
         refreshStatus()
+        showToast("Cleared")
+    }
+
+    private func showToast(_ message: String) {
+        toastDismissTask?.cancel()
+        withAnimation(.spring(duration: 0.28)) {
+            toastMessage = message
+        }
+
+        let dismissTask = DispatchWorkItem {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                toastMessage = nil
+            }
+        }
+
+        toastDismissTask = dismissTask
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4, execute: dismissTask)
     }
 }

@@ -1,9 +1,18 @@
 import AppKit
 import SwiftUI
 
+struct EditorErrorHighlight: Equatable {
+    let tokenRange: NSRange
+    let lineRange: NSRange
+    let lineNumber: Int
+    let message: String
+}
+
 struct JSONTextEditor: NSViewRepresentable {
     @Binding var text: String
     var isEditable: Bool = true
+    var errorHighlight: EditorErrorHighlight?
+    var errorRevealToken: Int = 0
     var onTextChange: ((String) -> Void)?
 
     func makeCoordinator() -> Coordinator {
@@ -12,7 +21,7 @@ struct JSONTextEditor: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
-        let textView = JSONFormattingTextView()
+        let textView = JSONFormattingTextView(frame: .zero)
 
         textView.isEditable = isEditable
         textView.isSelectable = true
@@ -25,9 +34,13 @@ struct JSONTextEditor: NSViewRepresentable {
         textView.usesFindBar = true
         textView.isIncrementalSearchingEnabled = true
         textView.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+        textView.textColor = SyntaxHighlighter.currentTheme().defaultText
         textView.textContainerInset = NSSize(width: 12, height: 12)
         textView.backgroundColor = SyntaxHighlighter.currentTheme().background
+        textView.drawsBackground = true
         textView.autoresizingMask = [.width]
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.containerSize = NSSize(
             width: CGFloat.greatestFiniteMagnitude,
@@ -45,21 +58,29 @@ struct JSONTextEditor: NSViewRepresentable {
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
 
-        DispatchQueue.main.async {
-            context.coordinator.setText(text)
-        }
-
+        context.coordinator.setText(text)
         return scrollView
     }
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
-        guard let textView = nsView.documentView as? NSTextView else {
+        guard let textView = nsView.documentView as? JSONFormattingTextView else {
             return
         }
 
+        context.coordinator.parent = self
         textView.isEditable = isEditable
         textView.backgroundColor = SyntaxHighlighter.currentTheme().background
+        textView.textColor = SyntaxHighlighter.currentTheme().defaultText
+        textView.drawsBackground = true
+
+        if let textContainer = textView.textContainer {
+            textContainer.containerSize = NSSize(
+                width: max(nsView.contentSize.width, 1),
+                height: CGFloat.greatestFiniteMagnitude
+            )
+        }
 
         if textView.string != text {
             context.coordinator.setText(text)
@@ -70,8 +91,9 @@ struct JSONTextEditor: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: JSONTextEditor
-        weak var textView: NSTextView?
+        weak var textView: JSONFormattingTextView?
         private var isUpdating = false
+        private var lastRevealedErrorToken = -1
 
         init(_ parent: JSONTextEditor) {
             self.parent = parent
@@ -110,16 +132,59 @@ struct JSONTextEditor: NSViewRepresentable {
             let selectedRanges = textView.selectedRanges
             let theme = SyntaxHighlighter.currentTheme()
             let font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-            let highlighted = SyntaxHighlighter.highlight(
-                textView.string,
-                theme: theme,
-                font: font
+            let highlighted = NSMutableAttributedString(
+                attributedString: SyntaxHighlighter.highlight(
+                    textView.string,
+                    theme: theme,
+                    font: font
+                )
             )
+
+            if let errorHighlight = parent.errorHighlight {
+                let lineRange = clamp(errorHighlight.lineRange, to: highlighted.length)
+                let tokenRange = clamp(errorHighlight.tokenRange, to: highlighted.length)
+
+                if lineRange.length > 0 {
+                    highlighted.addAttribute(
+                        .backgroundColor,
+                        value: NSColor.systemRed.withAlphaComponent(0.06),
+                        range: lineRange
+                    )
+                }
+
+                if tokenRange.length > 0 {
+                    highlighted.addAttributes(
+                        [
+                            .backgroundColor: NSColor.systemRed.withAlphaComponent(0.14),
+                            .underlineStyle: NSUnderlineStyle.single.union(.patternDot).rawValue,
+                            .underlineColor: NSColor.systemRed
+                        ],
+                        range: tokenRange
+                    )
+                }
+            }
 
             textView.textStorage?.beginEditing()
             textView.textStorage?.setAttributedString(highlighted)
             textView.textStorage?.endEditing()
+            textView.textColor = theme.defaultText
             textView.selectedRanges = selectedRanges
+
+            if parent.errorRevealToken != lastRevealedErrorToken,
+               let errorHighlight = parent.errorHighlight {
+                textView.scrollRangeToVisible(errorHighlight.tokenRange)
+                lastRevealedErrorToken = parent.errorRevealToken
+            }
+        }
+
+        private func clamp(_ range: NSRange, to length: Int) -> NSRange {
+            guard length > 0 else {
+                return NSRange(location: 0, length: 0)
+            }
+
+            let location = min(max(range.location, 0), length - 1)
+            let upperBound = min(NSMaxRange(range), length)
+            return NSRange(location: location, length: max(upperBound - location, 1))
         }
     }
 }

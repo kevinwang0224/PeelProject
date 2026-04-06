@@ -3,6 +3,14 @@ import SwiftData
 
 @Model
 final class HistoryItem {
+    static func defaultTitle(at date: Date = Date()) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter.string(from: date)
+    }
+
     var id: UUID
     var title: String
     var rawJSON: String

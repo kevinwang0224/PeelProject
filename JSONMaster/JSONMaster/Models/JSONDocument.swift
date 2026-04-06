@@ -21,8 +21,7 @@ struct JSONDocument {
         self.raw = raw
         size = raw.utf8.count
 
-        guard let data = raw.data(using: .utf8),
-              let jsonObject = try? JSONSerialization.jsonObject(with: data) else {
+        guard case .success(let jsonObject) = JSONFormatterService.parse(raw) else {
             formatted = raw
             type = .unknown
             keyCount = 0
@@ -54,13 +53,10 @@ struct JSONDocument {
             keyCount = 0
         }
 
-        if let prettyData = try? JSONSerialization.data(
-            withJSONObject: jsonObject,
-            options: [.prettyPrinted, .sortedKeys]
-        ),
-            let prettyString = String(data: prettyData, encoding: .utf8) {
-            formatted = prettyString
-        } else {
+        switch JSONFormatterService.format(raw, style: .pretty) {
+        case .success(let output):
+            formatted = output
+        case .failure:
             formatted = raw
         }
     }
