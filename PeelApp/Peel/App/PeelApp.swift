@@ -248,13 +248,13 @@ final class JSONWorkspace {
             return
         }
 
-        if shouldActivateApp {
-            activateAppWindow()
-        }
-
         let importedText = pasted.prettyJSON ?? pasted
         createNewItem(with: importedText)
         saveCurrent()
+
+        if shouldActivateApp {
+            activateAppWindow()
+        }
     }
 
     func performSelectAllCommand() {
@@ -398,9 +398,16 @@ final class JSONWorkspace {
     }
 
     private func activateAppWindow() {
+        NSApp.unhide(nil)
+        NSRunningApplication.current.activate(options: [.activateAllWindows])
         NSApp.activate(ignoringOtherApps: true)
 
         for window in NSApp.windows where window.canBecomeMain {
+            if window.isMiniaturized {
+                window.deminiaturize(nil)
+            }
+
+            window.orderFrontRegardless()
             window.makeKeyAndOrderFront(nil)
         }
     }
