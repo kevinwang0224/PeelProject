@@ -7,12 +7,14 @@ import UniformTypeIdentifiers
 @main
 struct PeelApp: App {
     @State private var workspace = JSONWorkspace()
+    @State private var editorLayoutSettings = EditorLayoutSettings()
     @StateObject private var quickPasteController = QuickPasteController()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environment(workspace)
+                .environment(editorLayoutSettings)
                 .task {
                     quickPasteController.bind(workspace: workspace)
                 }
@@ -29,6 +31,7 @@ struct PeelApp: App {
 
         Settings {
             QuickPasteSettingsView(controller: quickPasteController)
+                .environment(editorLayoutSettings)
         }
     }
 }

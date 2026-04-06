@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 struct QuickPasteSettingsView: View {
+    @Environment(EditorLayoutSettings.self) private var editorLayoutSettings
     @ObservedObject var controller: QuickPasteController
 
     var body: some View {
@@ -22,10 +23,38 @@ struct QuickPasteSettingsView: View {
                 }
                 .padding(.vertical, 4)
             }
+
+            Section("Editor Layout") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("结果区布局")
+                        .font(.headline)
+
+                    Picker(
+                        "结果区布局",
+                        selection: Binding(
+                            get: { editorLayoutSettings.resultLayout },
+                            set: { editorLayoutSettings.updateResultLayout($0) }
+                        )
+                    ) {
+                        ForEach(ExtractionResultLayout.allCases) { layout in
+                            Text(layout.title).tag(layout)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text(editorLayoutSettings.resultLayout.detail)
+                        .foregroundStyle(.secondary)
+
+                    Text("代码编辑区会始终固定在底部。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
         }
         .formStyle(.grouped)
         .padding(24)
-        .frame(width: 500)
+        .frame(width: 520)
     }
 }
 
