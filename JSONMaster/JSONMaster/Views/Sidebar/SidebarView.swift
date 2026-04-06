@@ -46,27 +46,7 @@ struct SidebarView: View {
             if !pinnedItems.isEmpty {
                 Section("Pinned") {
                     ForEach(pinnedItems) { item in
-                        HistoryRowView(item: item)
-                            .tag(item.id)
-                            .contextMenu {
-                                Button(item.isPinned ? "Unpin" : "Pin") {
-                                    togglePin(for: item)
-                                }
-
-                                Button("Rename") {
-                                    beginRename(item)
-                                }
-
-                                Button("Copy JSON") {
-                                    copyToPasteboard(item.rawJSON)
-                                }
-
-                                Divider()
-
-                                Button("Delete", role: .destructive) {
-                                    delete(item)
-                                }
-                            }
+                        historyRow(for: item)
                     }
                 }
             }
@@ -79,27 +59,7 @@ struct SidebarView: View {
                         .padding(.vertical, 8)
                 } else {
                     ForEach(unpinnedItems) { item in
-                        HistoryRowView(item: item)
-                            .tag(item.id)
-                            .contextMenu {
-                                Button(item.isPinned ? "Unpin" : "Pin") {
-                                    togglePin(for: item)
-                                }
-
-                                Button("Rename") {
-                                    beginRename(item)
-                                }
-
-                                Button("Copy JSON") {
-                                    copyToPasteboard(item.rawJSON)
-                                }
-
-                                Divider()
-
-                                Button("Delete", role: .destructive) {
-                                    delete(item)
-                                }
-                            }
+                        historyRow(for: item)
                     }
                 }
             }
@@ -141,6 +101,31 @@ struct SidebarView: View {
         } message: {
             Text("Give this JSON item a short name.")
         }
+    }
+
+    private func historyRow(for item: HistoryItem) -> some View {
+        HistoryRowView(item: item)
+            .tag(item.id)
+            .contentShape(Rectangle())
+            .contextMenu {
+                Button(item.isPinned ? "Unpin" : "Pin") {
+                    togglePin(for: item)
+                }
+
+                Button("Rename") {
+                    beginRename(item)
+                }
+
+                Button("Copy JSON") {
+                    copyToPasteboard(item.rawJSON)
+                }
+
+                Divider()
+
+                Button("Delete", role: .destructive) {
+                    delete(item)
+                }
+            }
     }
 
     private var renamePresentedBinding: Binding<Bool> {
