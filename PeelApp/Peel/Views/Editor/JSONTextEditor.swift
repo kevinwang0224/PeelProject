@@ -197,6 +197,7 @@ struct JSONTextEditor: NSViewRepresentable {
 struct ExpressionTextEditor: NSViewRepresentable {
     @Binding var text: String
     var onRun: (() -> Void)?
+    var focusRequestToken: Int = 0
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -242,6 +243,7 @@ struct ExpressionTextEditor: NSViewRepresentable {
         scrollView.borderType = .noBorder
 
         context.coordinator.setText(text)
+        context.coordinator.applyFocusRequestIfNeeded(focusRequestToken)
         return scrollView
     }
 
@@ -266,12 +268,15 @@ struct ExpressionTextEditor: NSViewRepresentable {
         if textView.string != text {
             context.coordinator.setText(text)
         }
+
+        context.coordinator.applyFocusRequestIfNeeded(focusRequestToken)
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: ExpressionTextEditor
         weak var textView: ExpressionNSTextView?
         private var isUpdating = false
+        private var lastHandledFocusRequest = 0
 
         init(_ parent: ExpressionTextEditor) {
             self.parent = parent
@@ -301,6 +306,24 @@ struct ExpressionTextEditor: NSViewRepresentable {
 
         func runShortcutPressed() {
             parent.onRun?()
+        }
+
+        func applyFocusRequestIfNeeded(_ focusRequestToken: Int) {
+            guard focusRequestToken > 0,
+                  focusRequestToken != lastHandledFocusRequest,
+                  let textView else {
+                return
+            }
+
+            lastHandledFocusRequest = focusRequestToken
+            DispatchQueue.main.async {
+                guard let window = textView.window,
+                      window.firstResponder !== textView else {
+                    return
+                }
+
+                window.makeFirstResponder(textView)
+            }
         }
     }
 }

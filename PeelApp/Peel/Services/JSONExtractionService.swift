@@ -45,7 +45,7 @@ struct ExtractionRunResult {
     static let idle = ExtractionRunResult(
         status: .idle,
         title: "Result",
-        text: "输入表达式后点 Run，结果会显示在这里。"
+        text: "输入表达式后，结果会显示在这里。"
     )
 }
 

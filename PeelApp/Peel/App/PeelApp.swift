@@ -11,17 +11,16 @@ struct PeelApp: App {
     @StateObject private var quickPasteController = QuickPasteController()
 
     var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .environment(workspace)
-                .environment(editorLayoutSettings)
-                .task {
-                    quickPasteController.bind(workspace: workspace)
-                }
+        WindowGroup(id: JSONWorkspace.mainWindowSceneID) {
+            MainWindowRootView(
+                workspace: workspace,
+                editorLayoutSettings: editorLayoutSettings,
+                quickPasteController: quickPasteController
+            )
         }
         .modelContainer(for: HistoryItem.self)
         .windowStyle(.titleBar)
-        .defaultSize(width: 1000, height: 650)
+        .defaultSize(width: 1100, height: 650)
         .commands {
             PeelCommands(
                 workspace: workspace,
@@ -46,11 +45,20 @@ final class JSONWorkspace {
     var modelContext: ModelContext?
     @ObservationIgnored
     private var noticeDismissTask: DispatchWorkItem?
+    @ObservationIgnored
+    private var openMainWindow: (() -> Void)?
+
+    static let mainWindowSceneID = "main-window"
+    static let mainWindowIdentifier = NSUserInterfaceItemIdentifier("PeelMainWindow")
 
     func bind(modelContext: ModelContext) {
         self.modelContext = modelContext
         removeEmptyHistoryItems()
         restoreSelectionIfNeeded()
+    }
+
+    func bindMainWindowOpener(_ openMainWindow: @escaping () -> Void) {
+        self.openMainWindow = openMainWindow
     }
 
     func reloadEditorFromSelection() {
@@ -335,6 +343,19 @@ final class JSONWorkspace {
         try? editorText.write(to: url, atomically: true, encoding: .utf8)
     }
 
+    func closeActiveWindow() {
+        if NSApp.sendAction(#selector(NSWindow.performClose(_:)), to: nil, from: nil) {
+            return
+        }
+
+        let fallbackWindow = NSApp.keyWindow ??
+            NSApp.mainWindow ??
+            mainWindows.first ??
+            NSApp.windows.first(where: \.canBecomeMain)
+
+        fallbackWindow?.performClose(nil)
+    }
+
     private var exportFileName: String {
         let baseName = selectedItem?.title.trimmingCharacters(in: .whitespacesAndNewlines)
         if let baseName, !baseName.isEmpty {
@@ -401,11 +422,31 @@ final class JSONWorkspace {
     }
 
     private func activateAppWindow() {
+        if mainWindows.isEmpty {
+            openMainWindow?()
+        }
+
+        performWindowActivation()
+        DispatchQueue.main.async { [weak self] in
+            self?.performWindowActivation()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+            self?.performWindowActivation()
+        }
+    }
+
+    private var mainWindows: [NSWindow] {
+        NSApp.windows.filter { $0.identifier == Self.mainWindowIdentifier }
+    }
+
+    private func performWindowActivation() {
         NSApp.unhide(nil)
-        NSRunningApplication.current.activate(options: [.activateAllWindows])
+        NSApp.arrangeInFront(nil)
+        NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
         NSApp.activate(ignoringOtherApps: true)
 
-        for window in NSApp.windows where window.canBecomeMain {
+        let targetWindows = mainWindows.isEmpty ? NSApp.windows.filter(\.canBecomeMain) : mainWindows
+        for window in targetWindows {
             if window.isMiniaturized {
                 window.deminiaturize(nil)
             }
@@ -413,6 +454,52 @@ final class JSONWorkspace {
             window.orderFrontRegardless()
             window.makeKeyAndOrderFront(nil)
         }
+    }
+}
+
+private struct MainWindowRootView: View {
+    @Environment(\.openWindow) private var openWindow
+
+    let workspace: JSONWorkspace
+    let editorLayoutSettings: EditorLayoutSettings
+    let quickPasteController: QuickPasteController
+
+    var body: some View {
+        ContentView()
+            .environment(workspace)
+            .environment(editorLayoutSettings)
+            .background(MainWindowMarker())
+            .task {
+                workspace.bindMainWindowOpener {
+                    openWindow(id: JSONWorkspace.mainWindowSceneID)
+                }
+                quickPasteController.bind(workspace: workspace)
+            }
+    }
+}
+
+private struct MainWindowMarker: NSViewRepresentable {
+    func makeNSView(context: Context) -> WindowMarkerView {
+        WindowMarkerView()
+    }
+
+    func updateNSView(_ nsView: WindowMarkerView, context: Context) {
+        nsView.markCurrentWindowIfNeeded()
+    }
+}
+
+private final class WindowMarkerView: NSView {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        markCurrentWindowIfNeeded()
+    }
+
+    func markCurrentWindowIfNeeded() {
+        guard let window else {
+            return
+        }
+
+        window.identifier = JSONWorkspace.mainWindowIdentifier
     }
 }
 
@@ -447,6 +534,13 @@ struct PeelCommands: Commands {
             }
             .keyboardShortcut("S", modifiers: [.command, .shift])
             .disabled(workspace.editorText.isEmpty)
+        }
+
+        CommandGroup(after: .saveItem) {
+            Button("Close Window") {
+                workspace.closeActiveWindow()
+            }
+            .keyboardShortcut("w")
         }
 
         CommandGroup(replacing: .pasteboard) {

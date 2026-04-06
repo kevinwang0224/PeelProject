@@ -17,9 +17,9 @@ struct EditorContainerView: View {
     @State private var extractionMode: ExtractionMode = .javaScript
     @State private var extractionQuery = ""
     @State private var extractionResult = ExtractionRunResult.idle
-    @State private var hasRunExtraction = false
     @State private var isResultCollapsed = true
-    @State private var isExpressionEditorCollapsed = true
+    @State private var isExpressionEditorCollapsed = false
+    @State private var expressionEditorFocusRequest = 0
     @State private var extractionRefreshTask: DispatchWorkItem?
 
     private let collapsedPanelHeight: CGFloat = 44
@@ -82,7 +82,8 @@ struct EditorContainerView: View {
             refreshStatus()
             scheduleExtractionRefreshIfNeeded()
         }
-        .onChange(of: extractionQuery, initial: false) { _, _ in
+        .onChange(of: extractionQuery, initial: false) { oldValue, newValue in
+            handleExtractionQueryChange(from: oldValue, to: newValue)
             scheduleExtractionRefreshIfNeeded()
         }
         .onChange(of: extractionMode, initial: false) { _, _ in
@@ -124,7 +125,7 @@ struct EditorContainerView: View {
 
     @ViewBuilder
     private var topContentView: some View {
-        if hasRunExtraction {
+        if shouldShowExtractionResult {
             switch editorLayoutSettings.resultLayout {
             case .stacked:
                 VSplitView {
@@ -334,7 +335,8 @@ struct EditorContainerView: View {
                 ZStack(alignment: .topLeading) {
                     ExpressionTextEditor(
                         text: $extractionQuery,
-                        onRun: runExtraction
+                        onRun: runExtraction,
+                        focusRequestToken: expressionEditorFocusRequest
                     )
 
                     if extractionQuery.isEmpty {
@@ -382,6 +384,10 @@ struct EditorContainerView: View {
         .help(helpText)
     }
 
+    private var shouldShowExtractionResult: Bool {
+        !extractionQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private func toolbarButton(
         _ title: String,
         systemImage: String,
@@ -397,8 +403,13 @@ struct EditorContainerView: View {
         cancelPendingExtractionRefresh()
         editorText = selectedItem?.rawJSON ?? ""
         refreshStatus()
-        hasRunExtraction = false
-        extractionResult = .idle
+        if shouldShowExtractionResult {
+            extractionResult = currentExtractionResult()
+            isResultCollapsed = false
+        } else {
+            extractionResult = .idle
+            isResultCollapsed = true
+        }
     }
 
     private func refreshStatus() {
@@ -528,11 +539,8 @@ struct EditorContainerView: View {
 
         cancelPendingExtractionRefresh()
 
-        if !hasRunExtraction {
-            withAnimation(.easeInOut(duration: 0.18)) {
-                hasRunExtraction = true
-                isResultCollapsed = false
-            }
+        withAnimation(.easeInOut(duration: 0.18)) {
+            isResultCollapsed = false
         }
 
         extractionResult = currentExtractionResult()
@@ -547,7 +555,8 @@ struct EditorContainerView: View {
     }
 
     private func scheduleExtractionRefreshIfNeeded() {
-        guard hasRunExtraction else {
+        guard shouldShowExtractionResult else {
+            extractionResult = .idle
             return
         }
 
@@ -567,6 +576,20 @@ struct EditorContainerView: View {
 
         extractionRefreshTask = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + autoRefreshDelay, execute: workItem)
+    }
+
+    private func handleExtractionQueryChange(from oldValue: String, to newValue: String) {
+        let oldIsEmpty = oldValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let newIsEmpty = newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+        if oldIsEmpty && !newIsEmpty {
+            isResultCollapsed = false
+            expressionEditorFocusRequest += 1
+        } else if !oldIsEmpty && newIsEmpty {
+            extractionResult = .idle
+            isResultCollapsed = true
+            expressionEditorFocusRequest += 1
+        }
     }
 
     private func cancelPendingExtractionRefresh() {

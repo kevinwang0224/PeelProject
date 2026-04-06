@@ -51,7 +51,7 @@ final class EditorLayoutSettings {
            let storedLayout = ExtractionResultLayout(rawValue: storedValue) {
             resultLayout = storedLayout
         } else {
-            resultLayout = .stacked
+            resultLayout = .sideBySide
         }
     }
 

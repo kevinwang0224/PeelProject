@@ -3,13 +3,13 @@ import XCTest
 
 @MainActor
 final class EditorLayoutSettingsTests: XCTestCase {
-    func testDefaultsToStackedLayout() {
+    func testDefaultsToSideBySideLayout() {
         let suiteName = "EditorLayoutSettingsTests.\(#function)"
         let userDefaults = makeUserDefaults(suiteName: suiteName)
 
         let settings = EditorLayoutSettings(userDefaults: userDefaults)
 
-        XCTAssertEqual(settings.resultLayout, .stacked)
+        XCTAssertEqual(settings.resultLayout, .sideBySide)
     }
 
     func testUpdatedLayoutPersistsAcrossInstances() {
