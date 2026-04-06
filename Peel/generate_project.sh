@@ -11,8 +11,8 @@ fi
 
 xcodegen generate
 xcodebuild \
-    -project JSONMaster.xcodeproj \
-    -scheme JSONMaster \
+    -project Peel.xcodeproj \
+    -scheme Peel \
     -configuration Debug \
     -derivedDataPath build \
     build

@@ -5,7 +5,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 @main
-struct JSONMasterApp: App {
+struct PeelApp: App {
     @State private var workspace = JSONWorkspace()
 
     var body: some Scene {
@@ -17,7 +17,7 @@ struct JSONMasterApp: App {
         .windowStyle(.titleBar)
         .defaultSize(width: 1000, height: 650)
         .commands {
-            JSONMasterCommands(workspace: workspace)
+            PeelCommands(workspace: workspace)
         }
     }
 }
@@ -291,7 +291,7 @@ final class JSONWorkspace {
             return baseName.replacingOccurrences(of: "/", with: "-") + ".json"
         }
 
-        return "JSON Export.json"
+        return "Peel Export.json"
     }
 
     private func removeEmptyHistoryItems() {
@@ -351,7 +351,7 @@ final class JSONWorkspace {
     }
 }
 
-struct JSONMasterCommands: Commands {
+struct PeelCommands: Commands {
     let workspace: JSONWorkspace
 
     var body: some Commands {

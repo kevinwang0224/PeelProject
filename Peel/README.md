@@ -1,4 +1,4 @@
-# JSONMaster
+# Peel
 
 一个原生 macOS JSON 格式化和编辑工具，只依赖 Apple 自带框架。
 
@@ -28,16 +28,16 @@
 ## 构建
 
 ```bash
-cd JSONMaster
+cd Peel
 brew install xcodegen
 xcodegen generate
-xcodebuild -project JSONMaster.xcodeproj -scheme JSONMaster -configuration Debug -derivedDataPath build build
+xcodebuild -project Peel.xcodeproj -scheme Peel -configuration Debug -derivedDataPath build build
 ```
 
 也可以直接运行：
 
 ```bash
-cd JSONMaster
+cd Peel
 ./generate_project.sh
 ```
 
