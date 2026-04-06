@@ -32,7 +32,8 @@ struct ContentView: View {
             workspace.bind(modelContext: modelContext)
             workspace.reloadEditorFromSelection()
         }
-        .onChange(of: workspace.selectedItem?.id, initial: true) { _, _ in
+        .onChange(of: workspace.selectedItem?.id, initial: true) { oldValue, _ in
+            workspace.deleteItemIfNeeded(afterLeaving: oldValue)
             workspace.reloadEditorFromSelection()
         }
         .onChange(of: workspace.editorText, initial: false) { _, _ in

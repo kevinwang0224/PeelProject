@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 struct EditorContainerView: View {
+    @Environment(JSONWorkspace.self) private var workspace
     @Binding var selectedItem: HistoryItem?
     @Binding var editorText: String
 
@@ -22,7 +23,10 @@ struct EditorContainerView: View {
             JSONTextEditor(
                 text: $editorText,
                 errorHighlight: currentErrorHighlight,
-                errorRevealToken: errorRevealToken
+                errorRevealToken: errorRevealToken,
+                onEditingEnded: {
+                    workspace.deleteSelectedItemIfEditorEmpty()
+                }
             )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 

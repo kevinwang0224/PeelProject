@@ -13,6 +13,7 @@ struct JSONTextEditor: NSViewRepresentable {
     var isEditable: Bool = true
     var errorHighlight: EditorErrorHighlight?
     var errorRevealToken: Int = 0
+    var onEditingEnded: (() -> Void)?
     var onTextChange: ((String) -> Void)?
 
     func makeCoordinator() -> Coordinator {
@@ -97,6 +98,10 @@ struct JSONTextEditor: NSViewRepresentable {
 
         init(_ parent: JSONTextEditor) {
             self.parent = parent
+        }
+
+        func textDidEndEditing(_ notification: Notification) {
+            parent.onEditingEnded?()
         }
 
         func textDidChange(_ notification: Notification) {

@@ -114,9 +114,6 @@ final class JSONWorkspace {
         }
 
         if editorText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            modelContext?.delete(selectedItem)
-            self.selectedItem = nil
-            try? modelContext?.save()
             return
         }
 
@@ -131,6 +128,40 @@ final class JSONWorkspace {
         selectedItem.formattedJSON = formattedJSON
         selectedItem.updatedAt = Date()
         try? modelContext?.save()
+    }
+
+    func deleteSelectedItemIfEditorEmpty() {
+        guard let selectedItem,
+              editorText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+
+        modelContext?.delete(selectedItem)
+        self.selectedItem = nil
+        editorText = ""
+        try? modelContext?.save()
+    }
+
+    func deleteItemIfNeeded(afterLeaving previousSelectionID: UUID?) {
+        guard let previousSelectionID,
+              previousSelectionID != selectedItem?.id,
+              editorText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let modelContext else {
+            return
+        }
+
+        let descriptor = FetchDescriptor<HistoryItem>(
+            predicate: #Predicate<HistoryItem> { item in
+                item.id == previousSelectionID
+            }
+        )
+
+        guard let item = try? modelContext.fetch(descriptor).first else {
+            return
+        }
+
+        modelContext.delete(item)
+        try? modelContext.save()
     }
 
     func formatEditor() {
@@ -167,6 +198,34 @@ final class JSONWorkspace {
 
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(output, forType: .string)
+    }
+
+    func performCutCommand() {
+        _ = NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: nil)
+    }
+
+    func performCopyCommand() {
+        if NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil) {
+            return
+        }
+
+        guard !editorText.isEmpty else {
+            return
+        }
+
+        copyCurrent()
+    }
+
+    func performPasteCommand() {
+        if NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil) {
+            return
+        }
+
+        pasteFromClipboardAndFormat()
+    }
+
+    func performSelectAllCommand() {
+        _ = NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
     }
 
     func pasteFromClipboardAndFormat() {
@@ -322,6 +381,30 @@ struct JSONMasterCommands: Commands {
             }
             .keyboardShortcut("S", modifiers: [.command, .shift])
             .disabled(workspace.editorText.isEmpty)
+        }
+
+        CommandGroup(replacing: .pasteboard) {
+            Button("Cut") {
+                workspace.performCutCommand()
+            }
+            .keyboardShortcut("x")
+
+            Button("Copy") {
+                workspace.performCopyCommand()
+            }
+            .keyboardShortcut("c")
+
+            Button("Paste") {
+                workspace.performPasteCommand()
+            }
+            .keyboardShortcut("v")
+
+            Divider()
+
+            Button("Select All") {
+                workspace.performSelectAllCommand()
+            }
+            .keyboardShortcut("a")
         }
 
         CommandGroup(after: .pasteboard) {
