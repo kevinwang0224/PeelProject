@@ -1,8 +1,12 @@
 .DS_Store
 .idea/
 
-JSONMaster/build/
-JSONMaster/*.xcworkspace/
-JSONMaster/xcuserdata/
-JSONMaster/**/*.xcuserdatad/
-JSONMaster/**/*.xcuserstate
+# Local build output
+PeelApp/build/
+DerivedData/
+
+# Xcode user-specific files
+**/xcuserdata/
+**/*.xcuserstate
+**/*.xccheckout
+**/*.xcscmblueprint

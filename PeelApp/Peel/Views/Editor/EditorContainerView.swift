@@ -188,8 +188,13 @@ struct EditorContainerView: View {
 
                 Spacer()
 
-                Button("Run") {
-                    runExtraction()
+                Button(action: runExtraction) {
+                    HStack(spacing: 6) {
+                        Text("Run")
+                        Text("⌘↩")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .disabled(!canRunExtraction)
             }
@@ -200,11 +205,10 @@ struct EditorContainerView: View {
             Divider()
 
             ZStack(alignment: .topLeading) {
-                TextEditor(text: $extractionQuery)
-                    .font(.system(size: 13, weight: .regular, design: .monospaced))
-                    .scrollContentBackground(.hidden)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 8)
+                ExpressionTextEditor(
+                    text: $extractionQuery,
+                    onRun: runExtraction
+                )
 
                 if extractionQuery.isEmpty {
                     Text(extractionMode.placeholder)
