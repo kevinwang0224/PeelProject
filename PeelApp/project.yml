@@ -27,3 +27,14 @@ targets:
     platform: macOS
     sources:
       - path: Peel
+  PeelTests:
+    type: bundle.unit-test
+    platform: macOS
+    settings:
+      base:
+        PRODUCT_NAME: PeelTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.peel.app.tests
+    sources:
+      - path: PeelTests
+    dependencies:
+      - target: Peel

@@ -10,9 +10,12 @@ struct ContentView: View {
         @Bindable var workspace = workspace
 
         NavigationSplitView {
-            SidebarView(selectedItem: $workspace.selectedItem, onCreateNew: {
-                workspace.createNewItem()
-            })
+            SidebarView(
+                selectedItem: $workspace.selectedItem,
+                onCreateNew: {
+                    workspace.createNewItem()
+                }
+            )
             .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 320)
         } detail: {
             Group {
@@ -42,6 +45,20 @@ struct ContentView: View {
         .onDrop(of: [UTType.fileURL.identifier], isTargeted: nil) { providers in
             handleDrop(providers: providers)
         }
+        .overlay(alignment: .topTrailing) {
+            if let noticeMessage = workspace.noticeMessage {
+                Text(noticeMessage)
+                    .font(.callout.weight(.medium))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .shadow(color: .black.opacity(0.12), radius: 12, x: 0, y: 6)
+                    .padding(.top, 16)
+                    .padding(.trailing, 18)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(duration: 0.28), value: workspace.noticeMessage)
     }
 
     private var emptyState: some View {

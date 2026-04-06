@@ -7,17 +7,28 @@ import UniformTypeIdentifiers
 @main
 struct PeelApp: App {
     @State private var workspace = JSONWorkspace()
+    @StateObject private var quickPasteController = QuickPasteController()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environment(workspace)
+                .task {
+                    quickPasteController.bind(workspace: workspace)
+                }
         }
         .modelContainer(for: HistoryItem.self)
         .windowStyle(.titleBar)
         .defaultSize(width: 1000, height: 650)
         .commands {
-            PeelCommands(workspace: workspace)
+            PeelCommands(
+                workspace: workspace,
+                quickPasteController: quickPasteController
+            )
+        }
+
+        Settings {
+            QuickPasteSettingsView(controller: quickPasteController)
         }
     }
 }
@@ -27,8 +38,11 @@ struct PeelApp: App {
 final class JSONWorkspace {
     var selectedItem: HistoryItem?
     var editorText = ""
+    var noticeMessage: String?
     @ObservationIgnored
     var modelContext: ModelContext?
+    @ObservationIgnored
+    private var noticeDismissTask: DispatchWorkItem?
 
     func bind(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -224,6 +238,25 @@ final class JSONWorkspace {
         pasteFromClipboardAndFormat()
     }
 
+    func performQuickPasteImport(shouldActivateApp: Bool) {
+        guard let pasted = NSPasteboard.general.string(forType: .string),
+              !pasted.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            if shouldActivateApp {
+                activateAppWindow()
+            }
+            showNotice("剪贴板里没有可用内容。")
+            return
+        }
+
+        if shouldActivateApp {
+            activateAppWindow()
+        }
+
+        let importedText = pasted.prettyJSON ?? pasted
+        createNewItem(with: importedText)
+        saveCurrent()
+    }
+
     func performSelectAllCommand() {
         _ = NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
     }
@@ -244,6 +277,20 @@ final class JSONWorkspace {
         }
 
         persistSelectedItem()
+    }
+
+    func showNotice(_ message: String) {
+        noticeDismissTask?.cancel()
+        noticeMessage = message
+
+        let dismissTask = DispatchWorkItem { [weak self] in
+            Task { @MainActor in
+                self?.noticeMessage = nil
+            }
+        }
+
+        noticeDismissTask = dismissTask
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6, execute: dismissTask)
     }
 
     func openJSONFile() {
@@ -349,10 +396,19 @@ final class JSONWorkspace {
             editorText = ""
         }
     }
+
+    private func activateAppWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+
+        for window in NSApp.windows where window.canBecomeMain {
+            window.makeKeyAndOrderFront(nil)
+        }
+    }
 }
 
 struct PeelCommands: Commands {
     let workspace: JSONWorkspace
+    @ObservedObject var quickPasteController: QuickPasteController
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
@@ -408,6 +464,12 @@ struct PeelCommands: Commands {
         }
 
         CommandGroup(after: .pasteboard) {
+            Divider()
+
+            Button(quickPasteController.menuCommandTitle) {
+                quickPasteController.runQuickPasteFromMenu()
+            }
+
             Divider()
 
             Button("Format JSON") {

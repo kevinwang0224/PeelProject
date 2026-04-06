@@ -8,7 +8,6 @@ struct SidebarView: View {
 
     @Binding var selectedItem: HistoryItem?
     var onCreateNew: () -> Void = {}
-    var onOpenSettings: () -> Void = {}
 
     @State private var searchText = ""
     @State private var renameTarget: HistoryItem?
@@ -87,9 +86,7 @@ struct SidebarView: View {
         }
         .safeAreaInset(edge: .bottom) {
             HStack {
-                Button {
-                    onOpenSettings()
-                } label: {
+                SettingsLink {
                     Label("Settings", systemImage: "gearshape")
                 }
                 .buttonStyle(.borderless)

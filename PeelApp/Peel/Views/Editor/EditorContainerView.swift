@@ -13,6 +13,9 @@ struct EditorContainerView: View {
     @State private var toastMessage: String?
     @State private var toastDismissTask: DispatchWorkItem?
     @State private var errorRevealToken = 0
+    @State private var extractionMode: ExtractionMode = .javaScript
+    @State private var extractionQuery = ""
+    @State private var extractionResult = ExtractionRunResult.idle
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,15 +23,17 @@ struct EditorContainerView: View {
 
             Divider()
 
-            JSONTextEditor(
-                text: $editorText,
-                errorHighlight: currentErrorHighlight,
-                errorRevealToken: errorRevealToken,
-                onEditingEnded: {
-                    workspace.deleteSelectedItemIfEditorEmpty()
-                }
-            )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            VSplitView {
+                rawJSONView
+                    .frame(minHeight: 240, idealHeight: 320, maxHeight: .infinity)
+
+                extractionResultView
+                    .frame(minHeight: 160, idealHeight: 210, maxHeight: .infinity)
+
+                extractionQueryView
+                    .frame(minHeight: 150, idealHeight: 180, maxHeight: 260)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Divider()
 
@@ -61,6 +66,7 @@ struct EditorContainerView: View {
         }
         .onChange(of: editorText, initial: true) { _, _ in
             refreshStatus()
+            invalidateExtractionResult()
         }
     }
 
@@ -96,6 +102,139 @@ struct EditorContainerView: View {
         .background(.bar)
     }
 
+    private var rawJSONView: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Text("Original JSON")
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer()
+
+                if let validationIssue {
+                    Text(validationIssue.displayMessage)
+                        .font(.caption)
+                        .foregroundStyle(Color.errorRed)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(.bar)
+
+            Divider()
+
+            JSONTextEditor(
+                text: $editorText,
+                errorHighlight: currentErrorHighlight,
+                errorRevealToken: errorRevealToken,
+                onEditingEnded: {
+                    workspace.deleteSelectedItemIfEditorEmpty()
+                }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(Color.editorBackground)
+    }
+
+    private var extractionResultView: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Extraction Result")
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer()
+
+                Text(resultStatusText)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(resultStatusColor)
+
+                Button("Copy") {
+                    copyExtractionResult()
+                }
+                .buttonStyle(.borderless)
+                .disabled(!extractionResult.canCopy)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(.bar)
+
+            Divider()
+
+            JSONTextEditor(
+                text: Binding(
+                    get: { extractionResult.text },
+                    set: { _ in }
+                ),
+                isEditable: false
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(Color.editorBackground)
+    }
+
+    private var extractionQueryView: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Text("Expression Editor")
+                    .font(.subheadline.weight(.semibold))
+
+                Picker("Mode", selection: $extractionMode) {
+                    ForEach(ExtractionMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 220)
+
+                Spacer()
+
+                Button("Run") {
+                    runExtraction()
+                }
+                .disabled(!canRunExtraction)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(.bar)
+
+            Divider()
+
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $extractionQuery)
+                    .font(.system(size: 13, weight: .regular, design: .monospaced))
+                    .scrollContentBackground(.hidden)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 8)
+
+                if extractionQuery.isEmpty {
+                    Text(extractionMode.placeholder)
+                        .font(.system(size: 13, weight: .regular, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 16)
+                        .allowsHitTesting(false)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.editorBackground)
+
+            Divider()
+
+            HStack {
+                Text(extractionHint)
+                    .font(.caption)
+                    .foregroundStyle(extractionHintColor)
+                    .lineLimit(1)
+
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(.bar)
+        }
+        .background(Color.editorBackground)
+    }
+
     private func toolbarButton(
         _ title: String,
         systemImage: String,
@@ -110,6 +249,7 @@ struct EditorContainerView: View {
     private func syncFromSelection() {
         editorText = selectedItem?.rawJSON ?? ""
         refreshStatus()
+        extractionResult = .idle
     }
 
     private func refreshStatus() {
@@ -186,6 +326,83 @@ struct EditorContainerView: View {
         editorText = ""
         refreshStatus()
         showToast("Cleared")
+    }
+
+    private var canRunExtraction: Bool {
+        !editorText.isEmpty &&
+            validationIssue == nil &&
+            !extractionQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var extractionHint: String {
+        if let validationIssue {
+            return "当前内容不是有效 JSON：\(validationIssue.displayMessage)"
+        }
+
+        return extractionMode.helpText
+    }
+
+    private var extractionHintColor: Color {
+        validationIssue == nil ? .secondary : Color.errorRed
+    }
+
+    private var resultStatusText: String {
+        switch extractionResult.status {
+        case .idle:
+            return "Ready"
+        case .success:
+            return "Result"
+        case .empty:
+            return "No Result"
+        case .error:
+            return "Error"
+        }
+    }
+
+    private var resultStatusColor: Color {
+        switch extractionResult.status {
+        case .idle:
+            return .secondary
+        case .success:
+            return Color.successGreen
+        case .empty:
+            return .secondary
+        case .error:
+            return Color.errorRed
+        }
+    }
+
+    private func runExtraction() {
+        guard validationIssue == nil else {
+            extractionResult = ExtractionRunResult(
+                status: .error,
+                title: "Invalid JSON",
+                text: "当前内容不是有效 JSON，不能执行提取。"
+            )
+            return
+        }
+
+        extractionResult = JSONExtractionService.run(
+            input: editorText,
+            query: extractionQuery,
+            mode: extractionMode
+        )
+    }
+
+    private func copyExtractionResult() {
+        guard extractionResult.canCopy else {
+            return
+        }
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(extractionResult.text, forType: .string)
+        showToast("Result Copied")
+    }
+
+    private func invalidateExtractionResult() {
+        if extractionResult.status != .idle {
+            extractionResult = .idle
+        }
     }
 
     private func showToast(_ message: String) {
