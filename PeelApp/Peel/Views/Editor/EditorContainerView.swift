@@ -14,6 +14,8 @@ struct EditorContainerView: View {
     @State private var toastMessage: String?
     @State private var toastDismissTask: DispatchWorkItem?
     @State private var errorRevealToken = 0
+    @State private var titleDraft = ""
+    @State private var titleDraftItem: HistoryItem?
     @State private var extractionMode: ExtractionMode = .javaScript
     @State private var extractionQuery = ""
     @State private var extractionResult = ExtractionRunResult.idle
@@ -21,6 +23,7 @@ struct EditorContainerView: View {
     @State private var isExpressionEditorCollapsed = false
     @State private var expressionEditorFocusRequest = 0
     @State private var extractionRefreshTask: DispatchWorkItem?
+    @FocusState private var isTitleFieldFocused: Bool
 
     private let collapsedPanelHeight: CGFloat = 44
     private let collapsedResultRailWidth: CGFloat = 36
@@ -29,9 +32,7 @@ struct EditorContainerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            toolbar
-
-            Divider()
+//            topActionBar
 
             VSplitView {
                 topContentView
@@ -56,6 +57,41 @@ struct EditorContainerView: View {
             )
         }
         .background(Color.editorBackground)
+        .toolbar {
+            ToolbarItemGroup(placement: .navigation) {
+                ControlGroup {
+                    titleToolbarField
+                }
+            }
+            
+            
+            
+            // 右侧：操作按钮组
+            ToolbarItemGroup(placement: .primaryAction) {
+                Spacer()
+                
+                // 使用 ControlGroup 可以让一组相关的工具按钮更美观
+                ControlGroup {
+                    Button(action: { handleFormat(.pretty) }) {
+                        Label("Format", systemImage: "text.alignleft")
+                    }
+                    
+                    Button(action: { handleFormat(.compact) }) {
+                        Label("Compact", systemImage: "arrow.down.right.and.arrow.up.left")
+                    }
+                    
+                    Button(action: { copyFormattedJSON() }) {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
+                    
+                    Button(action: { clearEditor() }) {
+                        Label("Clear", systemImage: "trash")
+                    }
+                }
+                .labelStyle(.titleAndIcon) // 如果你希望强制显示文字，添加此行
+            }
+            
+        }
         .overlay(alignment: .topTrailing) {
             if let toastMessage {
                 Text(toastMessage)
@@ -73,10 +109,23 @@ struct EditorContainerView: View {
             syncFromSelection()
         }
         .onDisappear {
+            commitTitleDraft()
             cancelPendingExtractionRefresh()
+            toastDismissTask?.cancel()
         }
         .onChange(of: selectedItem?.id, initial: false) { _, _ in
+            commitTitleDraft()
             syncFromSelection()
+        }
+        .onChange(of: selectedItem?.title, initial: false) { _, newValue in
+            guard !isTitleFieldFocused else {
+                return
+            }
+
+            let nextTitle = newValue ?? ""
+            if titleDraft != nextTitle {
+                titleDraft = nextTitle
+            }
         }
         .onChange(of: editorText, initial: true) { _, _ in
             refreshStatus()
@@ -89,10 +138,17 @@ struct EditorContainerView: View {
         .onChange(of: extractionMode, initial: false) { _, _ in
             scheduleExtractionRefreshIfNeeded()
         }
+        .onChange(of: isTitleFieldFocused, initial: false) { _, isFocused in
+            if !isFocused {
+                commitTitleDraft()
+            }
+        }
     }
 
-    private var toolbar: some View {
+    private var topActionBar: some View {
         HStack(spacing: 12) {
+            Spacer()
+
             toolbarButton("Format", systemImage: "text.alignleft") {
                 handleFormat(.pretty)
             }
@@ -108,19 +164,27 @@ struct EditorContainerView: View {
             toolbarButton("Clear", systemImage: "trash") {
                 clearEditor()
             }
-
-            Spacer()
-
-            if let validationIssue {
-                Text(validationIssue.displayMessage)
-                    .font(.caption)
-                    .foregroundStyle(Color.errorRed)
-                    .lineLimit(1)
-            }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
         .background(.bar)
+    }
+
+    @ViewBuilder
+    private var titleToolbarField: some View {
+        if selectedItem != nil {
+            TextField("JSON Title", text: $titleDraft)
+                        .textFieldStyle(.plain) // 1. 改为 plain 样式，移除那个笨重的圆角黑框
+                        .font(.system(size: 13, weight: .semibold)) // 2. 稍微加粗，模仿原生标题感
+                        .foregroundStyle(.primary)
+                        // 3. 核心：增加左侧间距
+                        .padding(.leading, 12)
+                        // 4. 固定宽度，防止标题过长挤压右侧按钮
+                        .frame(minWidth: 180, maxWidth: 320)
+                        .focused($isTitleFieldFocused)
+                        .onSubmit(commitTitleDraft)
+            
+        }
     }
 
     @ViewBuilder
@@ -401,6 +465,8 @@ struct EditorContainerView: View {
 
     private func syncFromSelection() {
         cancelPendingExtractionRefresh()
+        titleDraftItem = selectedItem
+        titleDraft = selectedItem?.title ?? ""
         editorText = selectedItem?.rawJSON ?? ""
         refreshStatus()
         if shouldShowExtractionResult {
@@ -410,6 +476,15 @@ struct EditorContainerView: View {
             extractionResult = .idle
             isResultCollapsed = true
         }
+    }
+
+    private func commitTitleDraft() {
+        guard let titleDraftItem else {
+            return
+        }
+
+        workspace.rename(titleDraftItem, to: titleDraft)
+        titleDraft = titleDraftItem.title
     }
 
     private func refreshStatus() {

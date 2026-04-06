@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0ABEEBC12F8406D50009A5B2 /* Date.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ABEEBC02F8406D30009A5B2 /* Date.swift */; };
 		2274C2227585B7F6EF442656 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DF04A8BF3B1D4724E2EA6C4 /* SidebarView.swift */; };
 		3875564A5B66E8449BDD42F7 /* QuickPasteShortcut.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B7364D25A00E533FA335F1E /* QuickPasteShortcut.swift */; };
 		3B66AA51DB61A919243D0E94 /* HistoryRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 335B8D2055509F80BA77366E /* HistoryRowView.swift */; };
@@ -43,6 +44,7 @@
 
 /* Begin PBXFileReference section */
 		0116360CA9772F394A0C89D9 /* String+JSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "String+JSON.swift"; sourceTree = "<group>"; };
+		0ABEEBC02F8406D30009A5B2 /* Date.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Date.swift; sourceTree = "<group>"; };
 		10BDA007E8077A365E172B4B /* EditorContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorContainerView.swift; sourceTree = "<group>"; };
 		160F09633B005A2DF94D7E52 /* SyntaxHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHighlighter.swift; sourceTree = "<group>"; };
 		1751635328545962FFC46AF8 /* StatusBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarView.swift; sourceTree = "<group>"; };
@@ -72,6 +74,7 @@
 		05AF34220B037342528CD8A2 /* Extensions */ = {
 			isa = PBXGroup;
 			children = (
+				0ABEEBC02F8406D30009A5B2 /* Date.swift */,
 				3E2CE7318939E3CDC87A0D6E /* Color+Theme.swift */,
 				0116360CA9772F394A0C89D9 /* String+JSON.swift */,
 			);
@@ -242,8 +245,6 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
-				TargetAttributes = {
-				};
 			};
 			buildConfigurationList = 078262014B44372A34E27C8E /* Build configuration list for PBXProject "Peel" */;
 			developmentRegion = en;
@@ -297,6 +298,7 @@
 				3875564A5B66E8449BDD42F7 /* QuickPasteShortcut.swift in Sources */,
 				2274C2227585B7F6EF442656 /* SidebarView.swift in Sources */,
 				AFC2EECB2BD844BB906BB12F /* StatusBarView.swift in Sources */,
+				0ABEEBC12F8406D50009A5B2 /* Date.swift in Sources */,
 				5C716A3481E7249A1CBA6C5F /* String+JSON.swift in Sources */,
 				70E49463E00C976EE912401F /* SyntaxHighlighter.swift in Sources */,
 			);

@@ -20,6 +20,7 @@ struct PeelApp: App {
         }
         .modelContainer(for: HistoryItem.self)
         .windowStyle(.titleBar)
+        .windowToolbarStyle(.unified(showsTitle: false))
         .defaultSize(width: 1100, height: 650)
         .commands {
             PeelCommands(
@@ -99,6 +100,16 @@ final class JSONWorkspace {
         selectedItem = item
         editorText = rawJSON
         try? modelContext.save()
+    }
+
+    func rename(_ item: HistoryItem, to proposedTitle: String) {
+        let resolvedTitle = resolvedTitle(from: proposedTitle, for: item)
+        guard item.title != resolvedTitle else {
+            return
+        }
+
+        item.title = resolvedTitle
+        try? modelContext?.save()
     }
 
     func saveCurrent() {
@@ -373,6 +384,15 @@ final class JSONWorkspace {
         return "Peel Export.json"
     }
 
+    private func resolvedTitle(from proposedTitle: String, for item: HistoryItem) -> String {
+        let trimmedTitle = proposedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedTitle.isEmpty {
+            return HistoryItem.defaultTitle(at: item.createdAt)
+        }
+
+        return trimmedTitle
+    }
+
     private func removeEmptyHistoryItems() {
         guard let modelContext else {
             return
@@ -508,6 +528,7 @@ private final class WindowMarkerView: NSView {
         }
 
         window.identifier = JSONWorkspace.mainWindowIdentifier
+        window.titleVisibility = .hidden
     }
 }
 

@@ -20,15 +20,15 @@ struct HistoryRowView: View {
             HStack(spacing: 6) {
                 Text(item.rawJSON.jsonByteSize)
                     .font(.caption)
-                    .foregroundStyle(Color.subtleText)
+                    .foregroundStyle(.secondary)
 
                 Text("·")
                     .font(.caption)
-                    .foregroundStyle(Color.subtleText)
+                    .foregroundStyle(.secondary)
 
-                Text(item.updatedAt, style: .relative)
+                Text(item.updatedAt.timeAgoDisplay())
                     .font(.caption)
-                    .foregroundStyle(Color.subtleText)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, 4)

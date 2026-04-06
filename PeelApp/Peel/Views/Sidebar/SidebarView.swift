@@ -3,6 +3,7 @@ import SwiftData
 import SwiftUI
 
 struct SidebarView: View {
+    @Environment(JSONWorkspace.self) private var workspace
     @Environment(\.modelContext) private var modelContext
     @Query(sort: [SortDescriptor(\HistoryItem.updatedAt, order: .reverse)]) private var items: [HistoryItem]
 
@@ -65,39 +66,45 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
-        .background(Color.sidebarBackground)
         .navigationTitle("History")
-        .searchable(text: $searchText, prompt: "Search JSON")
-        .safeAreaInset(edge: .top) {
-            HStack {
-                Button {
-                    onCreateNew()
-                } label: {
-                    Label("New", systemImage: "plus")
-                }
-                .buttonStyle(.borderless)
+        // 3. 替换为原生搜索
+        .searchable(text: $searchText, placement: .sidebar, prompt: "Search")
+        // 4. 将新建按钮移至 Toolbar
+           .toolbar {
+               ToolbarItemGroup(placement: .navigation) {
+                   ControlGroup {
+                       Button(action: onCreateNew) {
+                           Label("New", systemImage: "plus")
+                       }
+                    
+                   }
+                   
+               }
+           }
+        // 5. 底部仅保留必要的轻量化设置按钮（或直接移除，放到主菜单）
+           .safeAreaInset(edge: .bottom, spacing: 0) {
+               VStack(spacing: 0) {
+                   // 1. 顶部分割线（调淡一点，更原生）
+                   Divider()
+                       .opacity(0.3)
 
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(Color.sidebarBackground)
-        }
-        .safeAreaInset(edge: .bottom) {
-            HStack {
-                SettingsLink {
-                    Label("Settings", systemImage: "gearshape")
-                }
-                .buttonStyle(.borderless)
-
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(Color.sidebarBackground)
-        }
-        .background(Color.sidebarBackground)
+                   HStack {
+                       SettingsLink {
+                           Label("Settings", systemImage: "gearshape")
+                               .font(.system(size: 12))
+                               .foregroundStyle(.secondary)
+                       }
+                       .buttonStyle(.plain)
+                       
+                       Spacer()
+                   }
+                   .padding(.horizontal, 16)
+                   .padding(.vertical, 12)
+                   .frame(maxWidth: .infinity) // 确保撑满整个宽度
+                   // 2. 关键：使用和你侧边栏完全一致的背景色
+                   .background(Color.sidebarBackground)
+               }
+           }
         .alert("Rename Item", isPresented: renamePresentedBinding) {
             TextField("Title", text: $renameText)
             Button("Cancel", role: .cancel) {
@@ -157,11 +164,7 @@ struct SidebarView: View {
             return
         }
 
-        let trimmedText = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-        renameTarget.title = trimmedText.isEmpty
-            ? HistoryItem.defaultTitle(at: renameTarget.createdAt)
-            : trimmedText
-        try? modelContext.save()
+        workspace.rename(renameTarget, to: renameText)
         self.renameTarget = nil
     }
 
