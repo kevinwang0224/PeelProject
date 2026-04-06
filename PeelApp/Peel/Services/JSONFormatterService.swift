@@ -122,11 +122,16 @@ struct JSONValidationIssue: Equatable {
     }
 
     private func isWhitespace(_ character: unichar) -> Bool {
-        CharacterSet.whitespacesAndNewlines.contains(UnicodeScalar(character)!)
+        guard let scalar = UnicodeScalar(character) else {
+            return false
+        }
+        return CharacterSet.whitespacesAndNewlines.contains(scalar)
     }
 
     private func isTokenCharacter(_ character: unichar) -> Bool {
-        let scalar = UnicodeScalar(character)!
+        guard let scalar = UnicodeScalar(character) else {
+            return false
+        }
         return CharacterSet.alphanumerics.contains(scalar) || character == 95
     }
 }

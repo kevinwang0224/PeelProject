@@ -9,7 +9,8 @@ struct HistoryRowView: View {
                 if item.isPinned {
                     Image(systemName: "pin.fill")
                         .font(.caption2)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(.secondary)
+//                        .foregroundStyle(.orange)
                 }
 
                 Text(item.title)

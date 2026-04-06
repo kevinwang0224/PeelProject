@@ -450,16 +450,18 @@ final class JSONWorkspace {
     }
 
     private func activateAppWindow() {
-        if mainWindows.isEmpty {
+        NSApp.unhide(nil)
+
+        if mainWindows.isEmpty && !NSApp.windows.contains(where: \.canBecomeMain) {
             openMainWindow?()
         }
 
-        performWindowActivation()
+        bringMainWindowToFront()
         DispatchQueue.main.async { [weak self] in
-            self?.performWindowActivation()
+            self?.bringMainWindowToFront()
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
-            self?.performWindowActivation()
+            self?.bringMainWindowToFront()
         }
     }
 
@@ -467,21 +469,20 @@ final class JSONWorkspace {
         NSApp.windows.filter { $0.identifier == Self.mainWindowIdentifier }
     }
 
-    private func performWindowActivation() {
-        NSApp.unhide(nil)
-        NSApp.arrangeInFront(nil)
-        NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+    private func bringMainWindowToFront() {
+        NSRunningApplication.current.activate(options: [.activateIgnoringOtherApps])
         NSApp.activate(ignoringOtherApps: true)
 
-        let targetWindows = mainWindows.isEmpty ? NSApp.windows.filter(\.canBecomeMain) : mainWindows
-        for window in targetWindows {
-            if window.isMiniaturized {
-                window.deminiaturize(nil)
-            }
-
-            window.orderFrontRegardless()
-            window.makeKeyAndOrderFront(nil)
+        guard let window = mainWindows.first ?? NSApp.windows.first(where: \.canBecomeMain) else {
+            return
         }
+
+        if window.isMiniaturized {
+            window.deminiaturize(nil)
+        }
+
+        window.orderFrontRegardless()
+        window.makeKeyAndOrderFront(nil)
     }
 }
 
