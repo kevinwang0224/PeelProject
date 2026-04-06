@@ -272,6 +272,14 @@ final class JSONWorkspace {
         _ = NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
     }
 
+    func performFocusedJSONFindCommand() {
+        guard let textView = NSApp.keyWindow?.firstResponder as? JSONFormattingTextView else {
+            return
+        }
+
+        textView.showFindInterface()
+    }
+
     func pasteFromClipboardAndFormat() {
         guard let pasted = NSPasteboard.general.string(forType: .string) else {
             return
@@ -568,6 +576,11 @@ struct PeelCommands: Commands {
         }
 
         CommandGroup(after: .pasteboard) {
+            Button("Find") {
+                workspace.performFocusedJSONFindCommand()
+            }
+            .keyboardShortcut("f")
+
             Divider()
 
             Button(quickPasteController.menuCommandTitle) {

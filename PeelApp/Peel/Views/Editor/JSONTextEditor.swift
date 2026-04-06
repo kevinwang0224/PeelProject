@@ -340,6 +340,12 @@ final class JSONFormattingTextView: NSTextView {
         let output = transformPastedString?(pastedString) ?? pastedString
         insertText(output, replacementRange: selectedRange())
     }
+
+    func showFindInterface() {
+        let findMenuItem = NSMenuItem()
+        findMenuItem.tag = NSTextFinder.Action.showFindInterface.rawValue
+        perform(#selector(NSResponder.performTextFinderAction(_:)), with: findMenuItem)
+    }
 }
 
 final class ExpressionNSTextView: NSTextView {
