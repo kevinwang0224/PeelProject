@@ -1,0 +1,29 @@
+name: JSONMaster
+options:
+  bundleIdPrefix: com.jsonmaster
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    GENERATE_INFOPLIST_FILE: YES
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+    INFOPLIST_KEY_CFBundleDisplayName: JSON Master
+    PRODUCT_BUNDLE_IDENTIFIER: com.jsonmaster.app
+    PRODUCT_NAME: "JSON Master"
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: "1.0.0"
+    CODE_SIGNING_ALLOWED: NO
+
+targets:
+  JSONMaster:
+    type: application
+    platform: macOS
+    sources:
+      - path: JSONMaster

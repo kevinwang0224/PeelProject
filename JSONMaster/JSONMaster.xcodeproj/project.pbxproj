@@ -1,0 +1,419 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		01DDA239583A8521F7E3EE50 /* JSONTextEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9FDA9B4E78CC0F539FEC9A4 /* JSONTextEditor.swift */; };
+		20F4A262BDE20F9A5F12191D /* JSONDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F6364C6E3AE4FA3B8F27E9 /* JSONDocument.swift */; };
+		3045A8198A3F1CBB1CAB4A13 /* HistoryRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FE845A01D1BF0744E0222A6 /* HistoryRowView.swift */; };
+		4044B70EDD52CD8F4F9684E9 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B844FE44FB6713ECEBA9BBA /* SidebarView.swift */; };
+		488CA626AC4F245972FEB4D1 /* HistoryItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = F48218244756F69C89F2B8EE /* HistoryItem.swift */; };
+		57BF18B7F85ECD089733CA95 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC474D7974782443E207E8C5 /* ContentView.swift */; };
+		5B73A72554FC9B9F2C4B5822 /* StatusBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 997EFAB378C8A63E43AAF80D /* StatusBarView.swift */; };
+		613A74FCE2204F030FFB1E14 /* JSONFormatterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4EA4A7EF35FB44CAC14336D /* JSONFormatterService.swift */; };
+		727C0F85495E5AB55373D258 /* String+JSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = A43B018A993F4B99F60D13A1 /* String+JSON.swift */; };
+		86F3F9D1BC9A5395FB3B262C /* JSONMasterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80614194BD1B88CD691B0571 /* JSONMasterApp.swift */; };
+		AF2D8FF58EC13CFDDFB15A72 /* SyntaxHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE968771DDAE6997B1A04F81 /* SyntaxHighlighter.swift */; };
+		BBE32440C64334302428A842 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A8F7E1AAE25A2195F82B42D0 /* Assets.xcassets */; };
+		C41872F8EBD565F7F2EBCF43 /* EditorContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E09374D0DF7C4A43F4B08EEC /* EditorContainerView.swift */; };
+		E0422633FAE78AD396DA3520 /* Color+Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7836E4027ED4B311CB68C11 /* Color+Theme.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		1FE845A01D1BF0744E0222A6 /* HistoryRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryRowView.swift; sourceTree = "<group>"; };
+		2B844FE44FB6713ECEBA9BBA /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		31F6364C6E3AE4FA3B8F27E9 /* JSONDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONDocument.swift; sourceTree = "<group>"; };
+		45DCA10CF76BB00BB812A880 /* JSONMaster.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JSONMaster.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		80614194BD1B88CD691B0571 /* JSONMasterApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONMasterApp.swift; sourceTree = "<group>"; };
+		997EFAB378C8A63E43AAF80D /* StatusBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarView.swift; sourceTree = "<group>"; };
+		A43B018A993F4B99F60D13A1 /* String+JSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "String+JSON.swift"; sourceTree = "<group>"; };
+		A4EA4A7EF35FB44CAC14336D /* JSONFormatterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONFormatterService.swift; sourceTree = "<group>"; };
+		A8F7E1AAE25A2195F82B42D0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		DE968771DDAE6997B1A04F81 /* SyntaxHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHighlighter.swift; sourceTree = "<group>"; };
+		E09374D0DF7C4A43F4B08EEC /* EditorContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorContainerView.swift; sourceTree = "<group>"; };
+		E7836E4027ED4B311CB68C11 /* Color+Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Theme.swift"; sourceTree = "<group>"; };
+		EC474D7974782443E207E8C5 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		F48218244756F69C89F2B8EE /* HistoryItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryItem.swift; sourceTree = "<group>"; };
+		F9FDA9B4E78CC0F539FEC9A4 /* JSONTextEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONTextEditor.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		192CE25A482A81689964E3F7 = {
+			isa = PBXGroup;
+			children = (
+				8242D2B2E8B4BCCD495C59B6 /* JSONMaster */,
+				8ECC6A977CBE1347E22138F4 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		480247F1425ABB4F1AD6ADC7 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				F48218244756F69C89F2B8EE /* HistoryItem.swift */,
+				31F6364C6E3AE4FA3B8F27E9 /* JSONDocument.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		5C1EA0C4CA69D106403BD97C /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A8F7E1AAE25A2195F82B42D0 /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		7DFCCA9F0D12A6DD238B6FDF /* Sidebar */ = {
+			isa = PBXGroup;
+			children = (
+				1FE845A01D1BF0744E0222A6 /* HistoryRowView.swift */,
+				2B844FE44FB6713ECEBA9BBA /* SidebarView.swift */,
+			);
+			path = Sidebar;
+			sourceTree = "<group>";
+		};
+		7EEDE99680C6277CA578E34A /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				A4EA4A7EF35FB44CAC14336D /* JSONFormatterService.swift */,
+				DE968771DDAE6997B1A04F81 /* SyntaxHighlighter.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		8242D2B2E8B4BCCD495C59B6 /* JSONMaster */ = {
+			isa = PBXGroup;
+			children = (
+				A161CF352C71536A49008D21 /* App */,
+				9DCB9E892E55EA92AFBAD536 /* Extensions */,
+				480247F1425ABB4F1AD6ADC7 /* Models */,
+				5C1EA0C4CA69D106403BD97C /* Resources */,
+				7EEDE99680C6277CA578E34A /* Services */,
+				CB75955186B7544D9CC95C30 /* Views */,
+			);
+			path = JSONMaster;
+			sourceTree = "<group>";
+		};
+		8ECC6A977CBE1347E22138F4 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				45DCA10CF76BB00BB812A880 /* JSONMaster.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		9DCB9E892E55EA92AFBAD536 /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				E7836E4027ED4B311CB68C11 /* Color+Theme.swift */,
+				A43B018A993F4B99F60D13A1 /* String+JSON.swift */,
+			);
+			path = Extensions;
+			sourceTree = "<group>";
+		};
+		A161CF352C71536A49008D21 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				80614194BD1B88CD691B0571 /* JSONMasterApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		BF94934EAD5662915849D03E /* Editor */ = {
+			isa = PBXGroup;
+			children = (
+				E09374D0DF7C4A43F4B08EEC /* EditorContainerView.swift */,
+				F9FDA9B4E78CC0F539FEC9A4 /* JSONTextEditor.swift */,
+				997EFAB378C8A63E43AAF80D /* StatusBarView.swift */,
+			);
+			path = Editor;
+			sourceTree = "<group>";
+		};
+		CB75955186B7544D9CC95C30 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				EC474D7974782443E207E8C5 /* ContentView.swift */,
+				BF94934EAD5662915849D03E /* Editor */,
+				7DFCCA9F0D12A6DD238B6FDF /* Sidebar */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		92B96E8920E0A84402D198EF /* JSONMaster */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DDB2BDCECA486060DA685E87 /* Build configuration list for PBXNativeTarget "JSONMaster" */;
+			buildPhases = (
+				C70674BEC88640FB647D33FF /* Sources */,
+				1EA5F2167C3B95260A880603 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = JSONMaster;
+			packageProductDependencies = (
+			);
+			productName = JSONMaster;
+			productReference = 45DCA10CF76BB00BB812A880 /* JSONMaster.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		D8438E28F58DBAE88AF70EAE /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = 7E0E3A4AFCB5222996D13CEA /* Build configuration list for PBXProject "JSONMaster" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 192CE25A482A81689964E3F7;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8ECC6A977CBE1347E22138F4 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				92B96E8920E0A84402D198EF /* JSONMaster */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1EA5F2167C3B95260A880603 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BBE32440C64334302428A842 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C70674BEC88640FB647D33FF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E0422633FAE78AD396DA3520 /* Color+Theme.swift in Sources */,
+				57BF18B7F85ECD089733CA95 /* ContentView.swift in Sources */,
+				C41872F8EBD565F7F2EBCF43 /* EditorContainerView.swift in Sources */,
+				488CA626AC4F245972FEB4D1 /* HistoryItem.swift in Sources */,
+				3045A8198A3F1CBB1CAB4A13 /* HistoryRowView.swift in Sources */,
+				20F4A262BDE20F9A5F12191D /* JSONDocument.swift in Sources */,
+				613A74FCE2204F030FFB1E14 /* JSONFormatterService.swift in Sources */,
+				86F3F9D1BC9A5395FB3B262C /* JSONMasterApp.swift in Sources */,
+				01DDA239583A8521F7E3EE50 /* JSONTextEditor.swift in Sources */,
+				4044B70EDD52CD8F4F9684E9 /* SidebarView.swift in Sources */,
+				5B73A72554FC9B9F2C4B5822 /* StatusBarView.swift in Sources */,
+				727C0F85495E5AB55373D258 /* String+JSON.swift in Sources */,
+				AF2D8FF58EC13CFDDFB15A72 /* SyntaxHighlighter.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		23399EE3CB1FABB4E005D2C2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "JSON Master";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jsonmaster.app;
+				PRODUCT_NAME = "JSON Master";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		8741CC34C18F24215B5385D9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "JSON Master";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jsonmaster.app;
+				PRODUCT_NAME = "JSON Master";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		D315687F998A561A1BF97923 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		F639FCE31C3653BE4AC3D232 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		7E0E3A4AFCB5222996D13CEA /* Build configuration list for PBXProject "JSONMaster" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				23399EE3CB1FABB4E005D2C2 /* Debug */,
+				8741CC34C18F24215B5385D9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		DDB2BDCECA486060DA685E87 /* Build configuration list for PBXNativeTarget "JSONMaster" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D315687F998A561A1BF97923 /* Debug */,
+				F639FCE31C3653BE4AC3D232 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = D8438E28F58DBAE88AF70EAE /* Project object */;
+}

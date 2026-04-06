@@ -1,0 +1,8 @@
+.DS_Store
+.idea/
+
+JSONMaster/build/
+JSONMaster/*.xcworkspace/
+JSONMaster/xcuserdata/
+JSONMaster/**/*.xcuserdatad/
+JSONMaster/**/*.xcuserstate
