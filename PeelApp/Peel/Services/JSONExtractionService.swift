@@ -34,12 +34,34 @@ struct ExtractionRunResult {
         case error
     }
 
+    enum DisplayStyle: Equatable {
+        case plainText
+        case structuredJSON
+    }
+
     let status: Status
     let title: String
     let text: String
+    let displayStyle: DisplayStyle
+
+    init(
+        status: Status,
+        title: String,
+        text: String,
+        displayStyle: DisplayStyle = .plainText
+    ) {
+        self.status = status
+        self.title = title
+        self.text = text
+        self.displayStyle = displayStyle
+    }
 
     var canCopy: Bool {
         status == .success
+    }
+
+    var usesStructuredEditor: Bool {
+        displayStyle == .structuredJSON
     }
 
     static let idle = ExtractionRunResult(
@@ -50,8 +72,39 @@ struct ExtractionRunResult {
 }
 
 enum JSONExtractionService {
+    struct PreparedInput: @unchecked Sendable {
+        fileprivate let rootObject: Any
+    }
+
     static func run(
         input: String,
+        query: String,
+        mode: ExtractionMode
+    ) -> ExtractionRunResult {
+        let preparedInput: PreparedInput
+        do {
+            preparedInput = try prepare(input: input)
+        } catch {
+            return ExtractionRunResult(
+                status: .error,
+                title: "Invalid JSON",
+                text: "当前内容不是有效 JSON。"
+            )
+        }
+
+        return run(
+            preparedInput: preparedInput,
+            query: query,
+            mode: mode
+        )
+    }
+
+    static func prepare(input: String) throws -> PreparedInput {
+        PreparedInput(rootObject: try parseStrictJSON(input))
+    }
+
+    static func run(
+        preparedInput: PreparedInput,
         query: String,
         mode: ExtractionMode
     ) -> ExtractionRunResult {
@@ -64,23 +117,18 @@ enum JSONExtractionService {
             )
         }
 
-        let rootObject: Any
-        do {
-            rootObject = try parseStrictJSON(input)
-        } catch {
-            return ExtractionRunResult(
-                status: .error,
-                title: "Invalid JSON",
-                text: "当前内容不是有效 JSON。"
-            )
-        }
-
         do {
             switch mode {
             case .javaScript:
-                return try runJavaScript(query: trimmedQuery, rootObject: rootObject)
+                return try runJavaScript(
+                    query: trimmedQuery,
+                    rootObject: preparedInput.rootObject
+                )
             case .jsonPath:
-                return try runJSONPath(query: trimmedQuery, rootObject: rootObject)
+                return try runJSONPath(
+                    query: trimmedQuery,
+                    rootObject: preparedInput.rootObject
+                )
             }
         } catch let error as ExtractionError {
             return ExtractionRunResult(
@@ -143,7 +191,12 @@ enum JSONExtractionService {
 
         let bridgedObject = value.toObject()
         let rendered = try renderOutput(for: bridgedObject)
-        return ExtractionRunResult(status: .success, title: "Result", text: rendered)
+        return ExtractionRunResult(
+            status: .success,
+            title: "Result",
+            text: rendered.text,
+            displayStyle: rendered.displayStyle
+        )
     }
 
     private static func runJSONPath(query: String, rootObject: Any) throws -> ExtractionRunResult {
@@ -161,11 +214,21 @@ enum JSONExtractionService {
 
         if matches.count == 1 {
             let rendered = try renderOutput(for: matches[0])
-            return ExtractionRunResult(status: .success, title: "Result", text: rendered)
+            return ExtractionRunResult(
+                status: .success,
+                title: "Result",
+                text: rendered.text,
+                displayStyle: rendered.displayStyle
+            )
         }
 
         let rendered = try renderOutput(for: matches)
-        return ExtractionRunResult(status: .success, title: "Result", text: rendered)
+        return ExtractionRunResult(
+            status: .success,
+            title: "Result",
+            text: rendered.text,
+            displayStyle: rendered.displayStyle
+        )
     }
 
     private static func parseStrictJSON(_ input: String) throws -> Any {
@@ -176,30 +239,45 @@ enum JSONExtractionService {
         return try JSONSerialization.jsonObject(with: data, options: .fragmentsAllowed)
     }
 
-    private static func renderOutput(for value: Any?) throws -> String {
+    private static func renderOutput(for value: Any?) throws -> RenderedOutput {
         switch value {
         case let string as String:
-            return string
+            return RenderedOutput(text: string, displayStyle: .plainText)
         case let number as NSNumber:
             if CFGetTypeID(number) == CFBooleanGetTypeID() {
-                return number.boolValue ? "true" : "false"
+                return RenderedOutput(
+                    text: number.boolValue ? "true" : "false",
+                    displayStyle: .plainText
+                )
             }
 
-            return number.stringValue
+            return RenderedOutput(text: number.stringValue, displayStyle: .plainText)
         case is NSNull:
-            return "null"
+            return RenderedOutput(text: "null", displayStyle: .plainText)
         case let array as [Any]:
-            return try prettyJSONString(for: array)
+            return RenderedOutput(
+                text: try prettyJSONString(for: array),
+                displayStyle: .structuredJSON
+            )
         case let dictionary as [String: Any]:
-            return try prettyJSONString(for: dictionary)
+            return RenderedOutput(
+                text: try prettyJSONString(for: dictionary),
+                displayStyle: .structuredJSON
+            )
         case nil:
-            return "null"
+            return RenderedOutput(text: "null", displayStyle: .plainText)
         default:
             if JSONSerialization.isValidJSONObject(value as Any) {
-                return try prettyJSONString(for: value as Any)
+                return RenderedOutput(
+                    text: try prettyJSONString(for: value as Any),
+                    displayStyle: .structuredJSON
+                )
             }
 
-            return String(describing: value as Any)
+            return RenderedOutput(
+                text: String(describing: value as Any),
+                displayStyle: .plainText
+            )
         }
     }
 
@@ -294,6 +372,11 @@ enum JSONExtractionService {
 
         return results
     }
+}
+
+private struct RenderedOutput {
+    let text: String
+    let displayStyle: ExtractionRunResult.DisplayStyle
 }
 
 private struct ExtractionError: Error {

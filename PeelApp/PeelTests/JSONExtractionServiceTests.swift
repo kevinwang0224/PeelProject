@@ -101,4 +101,46 @@ final class JSONExtractionServiceTests: XCTestCase {
         XCTAssertEqual(result.status, .empty)
         XCTAssertEqual(result.text, "无结果")
     }
+
+    func testPreparedInputCanBeReusedForJavaScriptExtraction() throws {
+        let input = """
+        {
+          "user": {
+            "name": "Peel",
+            "age": 3
+          }
+        }
+        """
+
+        let preparedInput = try JSONExtractionService.prepare(input: input)
+        let result = JSONExtractionService.run(
+            preparedInput: preparedInput,
+            query: "data.user.age",
+            mode: .javaScript
+        )
+
+        XCTAssertEqual(result.status, .success)
+        XCTAssertEqual(result.text, "3")
+        XCTAssertEqual(result.displayStyle, .plainText)
+    }
+
+    func testStructuredResultMarksStructuredDisplayStyle() {
+        let input = """
+        {
+          "items": [
+            { "id": 1 },
+            { "id": 2 }
+          ]
+        }
+        """
+
+        let result = JSONExtractionService.run(
+            input: input,
+            query: "$.items[*]",
+            mode: .jsonPath
+        )
+
+        XCTAssertEqual(result.status, .success)
+        XCTAssertEqual(result.displayStyle, .structuredJSON)
+    }
 }

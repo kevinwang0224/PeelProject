@@ -3,6 +3,12 @@ import Foundation
 
 struct SyntaxHighlighter {
     struct Theme {
+        enum Variant {
+            case light
+            case dark
+        }
+
+        let variant: Variant
         let key: NSColor
         let string: NSColor
         let number: NSColor
@@ -13,6 +19,7 @@ struct SyntaxHighlighter {
         let defaultText: NSColor
 
         static let light = Theme(
+            variant: .light,
             key: NSColor(red: 0.16, green: 0.30, blue: 0.60, alpha: 1.0),
             string: NSColor(red: 0.76, green: 0.24, blue: 0.16, alpha: 1.0),
             number: NSColor(red: 0.11, green: 0.51, blue: 0.47, alpha: 1.0),
@@ -24,6 +31,7 @@ struct SyntaxHighlighter {
         )
 
         static let dark = Theme(
+            variant: .dark,
             key: NSColor(red: 0.58, green: 0.79, blue: 0.93, alpha: 1.0),
             string: NSColor(red: 0.81, green: 0.56, blue: 0.42, alpha: 1.0),
             number: NSColor(red: 0.71, green: 0.84, blue: 0.59, alpha: 1.0),
@@ -33,6 +41,16 @@ struct SyntaxHighlighter {
             background: NSColor(red: 0.12, green: 0.12, blue: 0.14, alpha: 1.0),
             defaultText: NSColor(red: 0.85, green: 0.85, blue: 0.85, alpha: 1.0)
         )
+    }
+
+    private enum RegexStore {
+        static let key = compile("\"([^\"\\\\]|\\\\.)*\"\\s*:")
+        static let valueString = compile(":\\s*\"([^\"\\\\]|\\\\.)*\"")
+        static let arrayString = compile("(?<=\\[\\s{0,100}|,\\s{0,100})\"([^\"\\\\]|\\\\.)*\"")
+        static let number = compile("(?<=:\\s{0,10}|\\[\\s{0,10}|,\\s{0,10})-?\\d+(\\.\\d+)?([eE][+-]?\\d+)?")
+        static let boolean = compile("\\b(true|false)\\b")
+        static let null = compile("\\bnull\\b")
+        static let brace = compile("[\\{\\}\\[\\]]")
     }
 
     static func highlight(_ json: String, theme: Theme, font: NSFont) -> NSAttributedString {
@@ -48,7 +66,7 @@ struct SyntaxHighlighter {
         let fullRange = NSRange(location: 0, length: text.length)
 
         applyMatches(
-            pattern: "\"([^\"\\\\]|\\\\.)*\"\\s*:",
+            regex: RegexStore.key,
             in: json,
             range: fullRange
         ) { match in
@@ -62,7 +80,7 @@ struct SyntaxHighlighter {
         }
 
         applyMatches(
-            pattern: ":\\s*\"([^\"\\\\]|\\\\.)*\"",
+            regex: RegexStore.valueString,
             in: json,
             range: fullRange
         ) { match in
@@ -80,7 +98,7 @@ struct SyntaxHighlighter {
         }
 
         applyMatches(
-            pattern: "(?<=\\[\\s{0,100}|,\\s{0,100})\"([^\"\\\\]|\\\\.)*\"",
+            regex: RegexStore.arrayString,
             in: json,
             range: fullRange
         ) { match in
@@ -88,22 +106,22 @@ struct SyntaxHighlighter {
         }
 
         applyMatches(
-            pattern: "(?<=:\\s{0,10}|\\[\\s{0,10}|,\\s{0,10})-?\\d+(\\.\\d+)?([eE][+-]?\\d+)?",
+            regex: RegexStore.number,
             in: json,
             range: fullRange
         ) { match in
             attributed.addAttribute(.foregroundColor, value: theme.number, range: match.range)
         }
 
-        applyMatches(pattern: "\\b(true|false)\\b", in: json, range: fullRange) { match in
+        applyMatches(regex: RegexStore.boolean, in: json, range: fullRange) { match in
             attributed.addAttribute(.foregroundColor, value: theme.boolean, range: match.range)
         }
 
-        applyMatches(pattern: "\\bnull\\b", in: json, range: fullRange) { match in
+        applyMatches(regex: RegexStore.null, in: json, range: fullRange) { match in
             attributed.addAttribute(.foregroundColor, value: theme.null, range: match.range)
         }
 
-        applyMatches(pattern: "[\\{\\}\\[\\]]", in: json, range: fullRange) { match in
+        applyMatches(regex: RegexStore.brace, in: json, range: fullRange) { match in
             attributed.addAttribute(.foregroundColor, value: theme.brace, range: match.range)
         }
 
@@ -120,15 +138,19 @@ struct SyntaxHighlighter {
     }
 
     private static func applyMatches(
-        pattern: String,
+        regex: NSRegularExpression,
         in json: String,
         range: NSRange,
         using body: (NSTextCheckingResult) -> Void
     ) {
+        regex.matches(in: json, range: range).forEach(body)
+    }
+
+    private static func compile(_ pattern: String) -> NSRegularExpression {
         guard let regex = try? NSRegularExpression(pattern: pattern) else {
-            return
+            preconditionFailure("Invalid syntax highlight pattern: \(pattern)")
         }
 
-        regex.matches(in: json, range: range).forEach(body)
+        return regex
     }
 }

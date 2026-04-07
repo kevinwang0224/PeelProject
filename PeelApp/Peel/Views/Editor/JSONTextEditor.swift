@@ -61,7 +61,7 @@ struct JSONTextEditor: NSViewRepresentable {
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
 
-        context.coordinator.setText(text)
+        context.coordinator.setText(text, theme: SyntaxHighlighter.currentTheme())
         return scrollView
     }
 
@@ -71,9 +71,10 @@ struct JSONTextEditor: NSViewRepresentable {
         }
 
         context.coordinator.parent = self
+        let theme = SyntaxHighlighter.currentTheme()
         textView.isEditable = isEditable
-        textView.backgroundColor = SyntaxHighlighter.currentTheme().background
-        textView.textColor = SyntaxHighlighter.currentTheme().defaultText
+        textView.backgroundColor = theme.background
+        textView.textColor = theme.defaultText
         textView.drawsBackground = true
 
         if let textContainer = textView.textContainer {
@@ -84,9 +85,9 @@ struct JSONTextEditor: NSViewRepresentable {
         }
 
         if textView.string != text {
-            context.coordinator.setText(text)
+            context.coordinator.setText(text, theme: theme)
         } else {
-            context.coordinator.applyHighlighting()
+            context.coordinator.refreshHighlightingIfNeeded(theme: theme)
         }
     }
 
@@ -95,6 +96,9 @@ struct JSONTextEditor: NSViewRepresentable {
         weak var textView: JSONFormattingTextView?
         private var isUpdating = false
         private var lastRevealedErrorToken = -1
+        private var lastHighlightedText = ""
+        private var lastThemeVariant: SyntaxHighlighter.Theme.Variant?
+        private var lastErrorHighlight: EditorErrorHighlight?
 
         init(_ parent: JSONTextEditor) {
             self.parent = parent
@@ -112,11 +116,11 @@ struct JSONTextEditor: NSViewRepresentable {
             isUpdating = true
             parent.text = textView.string
             parent.onTextChange?(textView.string)
-            applyHighlighting()
+            applyHighlighting(theme: SyntaxHighlighter.currentTheme())
             isUpdating = false
         }
 
-        func setText(_ text: String) {
+        func setText(_ text: String, theme: SyntaxHighlighter.Theme) {
             guard let textView else {
                 return
             }
@@ -124,18 +128,31 @@ struct JSONTextEditor: NSViewRepresentable {
             isUpdating = true
             let selectedRanges = textView.selectedRanges
             textView.string = text
-            applyHighlighting()
+            applyHighlighting(theme: theme)
             textView.selectedRanges = selectedRanges
             isUpdating = false
         }
 
-        func applyHighlighting() {
+        func refreshHighlightingIfNeeded(theme: SyntaxHighlighter.Theme) {
+            let currentText = textView?.string ?? ""
+            let needsHighlighting = lastHighlightedText != currentText ||
+                lastThemeVariant != theme.variant ||
+                lastErrorHighlight != parent.errorHighlight
+
+            if needsHighlighting {
+                applyHighlighting(theme: theme)
+                return
+            }
+
+            revealErrorIfNeeded()
+        }
+
+        func applyHighlighting(theme: SyntaxHighlighter.Theme) {
             guard let textView else {
                 return
             }
 
             let selectedRanges = textView.selectedRanges
-            let theme = SyntaxHighlighter.currentTheme()
             let font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
             let highlighted = NSMutableAttributedString(
                 attributedString: SyntaxHighlighter.highlight(
@@ -174,12 +191,21 @@ struct JSONTextEditor: NSViewRepresentable {
             textView.textStorage?.endEditing()
             textView.textColor = theme.defaultText
             textView.selectedRanges = selectedRanges
+            lastHighlightedText = textView.string
+            lastThemeVariant = theme.variant
+            lastErrorHighlight = parent.errorHighlight
+            revealErrorIfNeeded()
+        }
 
-            if parent.errorRevealToken != lastRevealedErrorToken,
-               let errorHighlight = parent.errorHighlight {
-                textView.scrollRangeToVisible(errorHighlight.tokenRange)
-                lastRevealedErrorToken = parent.errorRevealToken
+        private func revealErrorIfNeeded() {
+            guard let textView,
+                  parent.errorRevealToken != lastRevealedErrorToken,
+                  let errorHighlight = parent.errorHighlight else {
+                return
             }
+
+            textView.scrollRangeToVisible(errorHighlight.tokenRange)
+            lastRevealedErrorToken = parent.errorRevealToken
         }
 
         private func clamp(_ range: NSRange, to length: Int) -> NSRange {

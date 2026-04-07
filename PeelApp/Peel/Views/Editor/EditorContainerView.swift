@@ -19,20 +19,27 @@ struct EditorContainerView: View {
     @State private var extractionMode: ExtractionMode = .javaScript
     @State private var extractionQuery = ""
     @State private var extractionResult = ExtractionRunResult.idle
+    @State private var preparedExtractionInput: JSONExtractionService.PreparedInput?
     @State private var isResultCollapsed = true
+    @State private var shouldAutoExpandResultAfterNextRefresh = false
     @State private var isExpressionEditorCollapsed = false
     @State private var expressionEditorFocusRequest = 0
     @State private var extractionRefreshTask: DispatchWorkItem?
+    @State private var latestExtractionRequestID: UInt64 = 0
     @FocusState private var isTitleFieldFocused: Bool
 
     private let collapsedPanelHeight: CGFloat = 44
     private let collapsedResultRailWidth: CGFloat = 36
-    private let autoRefreshDelay: TimeInterval = 0.18
+    private let javaScriptAutoRefreshDelay: TimeInterval = 0.25
+    private let jsonPathAutoRefreshDelay: TimeInterval = 0.25
     private let panelHeaderHeight: CGFloat = 38
+    private static let extractionQueue = DispatchQueue(
+        label: "Peel.EditorExtractionPreview",
+        qos: .userInitiated
+    )
 
     var body: some View {
         VStack(spacing: 0) {
-//            topActionBar
 
             VSplitView {
                 topContentView
@@ -145,30 +152,6 @@ struct EditorContainerView: View {
         }
     }
 
-    private var topActionBar: some View {
-        HStack(spacing: 12) {
-            Spacer()
-
-            toolbarButton("Format", systemImage: "text.alignleft") {
-                handleFormat(.pretty)
-            }
-
-            toolbarButton("Compact", systemImage: "arrow.down.right.and.arrow.up.left") {
-                handleFormat(.compact)
-            }
-
-            toolbarButton("Copy", systemImage: "doc.on.doc") {
-                copyFormattedJSON()
-            }
-
-            toolbarButton("Clear", systemImage: "trash") {
-                clearEditor()
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.bar)
-    }
 
     @ViewBuilder
     private var titleToolbarField: some View {
@@ -227,37 +210,29 @@ struct EditorContainerView: View {
     }
 
     private var rawJSONView: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Text("Original JSON")
-                    .font(.subheadline.weight(.semibold))
-
-                Spacer()
-
-                if let validationIssue {
-                    Text(validationIssue.displayMessage)
-                        .font(.caption)
-                        .foregroundStyle(Color.errorRed)
-                        .lineLimit(1)
-                }
+        RawJSONEditorPanel(
+            editorText: $editorText,
+            validationIssue: validationIssue,
+            errorHighlight: currentErrorHighlight,
+            errorRevealToken: errorRevealToken,
+            panelHeaderHeight: panelHeaderHeight,
+            onEditingEnded: {
+                workspace.deleteSelectedItemIfEditorEmpty()
             }
-            .padding(.horizontal, 12)
-            .frame(height: panelHeaderHeight)
-            .background(.bar)
+        )
+    }
 
-            Divider()
-
-            JSONTextEditor(
-                text: $editorText,
-                errorHighlight: currentErrorHighlight,
-                errorRevealToken: errorRevealToken,
-                onEditingEnded: {
-                    workspace.deleteSelectedItemIfEditorEmpty()
-                }
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .background(Color.editorBackground)
+    private var extractionResultView: some View {
+        ExtractionResultPanel(
+            result: extractionResult,
+            isCollapsed: $isResultCollapsed,
+            statusText: resultStatusText,
+            statusColor: resultStatusColor,
+            panelHeaderHeight: panelHeaderHeight,
+            collapseSymbolName: resultCollapseSymbolName,
+            collapseHelpText: resultCollapseHelpText,
+            onCopy: copyExtractionResult
+        )
     }
 
     private var sideBySideCollapsedResultRail: some View {
@@ -289,53 +264,6 @@ struct EditorContainerView: View {
         .background(.bar)
     }
 
-    private var extractionResultView: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Text("Extraction Result")
-                    .font(.subheadline.weight(.semibold))
-
-                Spacer()
-
-                Text(resultStatusText)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(resultStatusColor)
-
-                Button("Copy") {
-                    copyExtractionResult()
-                }
-                .buttonStyle(.borderless)
-                .disabled(!extractionResult.canCopy)
-
-                collapseButton(
-                    symbolName: resultCollapseSymbolName,
-                    helpText: resultCollapseHelpText
-                ) {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        isResultCollapsed.toggle()
-                    }
-                }
-            }
-            .padding(.horizontal, 12)
-            .frame(height: panelHeaderHeight)
-            .background(.bar)
-
-            if !isResultCollapsed {
-                Divider()
-
-                JSONTextEditor(
-                    text: Binding(
-                        get: { extractionResult.text },
-                        set: { _ in }
-                    ),
-                    isEditable: false
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .background(Color.editorBackground)
-    }
-
     private var resultCollapseSymbolName: String {
         switch editorLayoutSettings.resultLayout {
         case .sideBySide:
@@ -355,82 +283,17 @@ struct EditorContainerView: View {
     }
 
     private var extractionQueryView: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Text("Expression Editor")
-                    .font(.subheadline.weight(.semibold))
-
-                Picker("Mode", selection: $extractionMode) {
-                    ForEach(ExtractionMode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 220)
-
-                Spacer()
-
-                Button(action: runExtraction) {
-                    HStack(spacing: 6) {
-                        Text("Run")
-                        Text("⌘↩")
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .disabled(!canRunExtraction)
-
-                collapseButton(
-                    symbolName: isExpressionEditorCollapsed ? "chevron.down" : "chevron.up",
-                    helpText: isExpressionEditorCollapsed ? "展开代码编辑区" : "折叠代码编辑区"
-                ) {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        isExpressionEditorCollapsed.toggle()
-                    }
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(.bar)
-
-            if !isExpressionEditorCollapsed {
-                Divider()
-
-                ZStack(alignment: .topLeading) {
-                    ExpressionTextEditor(
-                        text: $extractionQuery,
-                        onRun: runExtraction,
-                        focusRequestToken: expressionEditorFocusRequest
-                    )
-
-                    if extractionQuery.isEmpty {
-                        Text(extractionMode.placeholder)
-                            .font(.system(size: 13, weight: .regular, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 16)
-                            .allowsHitTesting(false)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.editorBackground)
-
-                Divider()
-
-                HStack {
-                    Text(extractionHint)
-                        .font(.caption)
-                        .foregroundStyle(extractionHintColor)
-                        .lineLimit(1)
-
-                    Spacer()
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(.bar)
-            }
-        }
-        .background(Color.editorBackground)
+        ExpressionEditorPanel(
+            extractionMode: $extractionMode,
+            extractionQuery: $extractionQuery,
+            isCollapsed: $isExpressionEditorCollapsed,
+            canRunExtraction: canRunExtraction,
+            extractionHint: extractionHint,
+            extractionHintColor: extractionHintColor,
+            focusRequestToken: expressionEditorFocusRequest,
+            panelHeaderHeight: panelHeaderHeight,
+            onRun: runExtraction
+        )
     }
 
     private func collapseButton(
@@ -448,8 +311,12 @@ struct EditorContainerView: View {
         .help(helpText)
     }
 
-    private var shouldShowExtractionResult: Bool {
+    private var hasExtractionQuery: Bool {
         !extractionQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var shouldShowExtractionResult: Bool {
+        hasExtractionQuery && (!isResultCollapsed || extractionResult.status != .idle)
     }
 
     private func toolbarButton(
@@ -469,9 +336,8 @@ struct EditorContainerView: View {
         titleDraft = selectedItem?.title ?? ""
         editorText = selectedItem?.rawJSON ?? ""
         refreshStatus()
-        if shouldShowExtractionResult {
-            extractionResult = currentExtractionResult()
-            isResultCollapsed = false
+        if hasExtractionQuery {
+            scheduleExtractionRefreshIfNeeded(immediate: true)
         } else {
             extractionResult = .idle
             isResultCollapsed = true
@@ -493,6 +359,7 @@ struct EditorContainerView: View {
         isValid = !editorText.isEmpty && validationIssue == nil
         jsonType = document.type
         keyCount = document.keyCount
+        updatePreparedExtractionInput()
     }
 
     private var currentErrorHighlight: EditorErrorHighlight? {
@@ -612,45 +479,65 @@ struct EditorContainerView: View {
             return
         }
 
-        cancelPendingExtractionRefresh()
-
         withAnimation(.easeInOut(duration: 0.18)) {
             isResultCollapsed = false
         }
 
-        extractionResult = currentExtractionResult()
+        scheduleExtractionRefreshIfNeeded(immediate: true)
     }
 
-    private func currentExtractionResult() -> ExtractionRunResult {
-        JSONExtractionService.run(
-            input: editorText,
-            query: extractionQuery,
-            mode: extractionMode
-        )
-    }
+    private func scheduleExtractionRefreshIfNeeded(immediate: Bool = false) {
+        guard hasExtractionQuery else {
+            cancelPendingExtractionRefresh()
+            extractionResult = .idle
+            return
+        }
 
-    private func scheduleExtractionRefreshIfNeeded() {
-        guard shouldShowExtractionResult else {
+        guard validationIssue == nil,
+              let preparedExtractionInput else {
+            cancelPendingExtractionRefresh()
+            extractionResult = .idle
+            return
+        }
+
+        let trimmedQuery = extractionQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else {
+            cancelPendingExtractionRefresh()
             extractionResult = .idle
             return
         }
 
         cancelPendingExtractionRefresh()
 
-        let input = editorText
-        let query = extractionQuery
         let mode = extractionMode
+        let requestID = nextExtractionRequestID()
         let workItem = DispatchWorkItem {
-            extractionResult = JSONExtractionService.run(
-                input: input,
-                query: query,
-                mode: mode
-            )
-            extractionRefreshTask = nil
+            EditorContainerView.extractionQueue.async {
+                let result = JSONExtractionService.run(
+                    preparedInput: preparedExtractionInput,
+                    query: trimmedQuery,
+                    mode: mode
+                )
+
+                DispatchQueue.main.async {
+                    guard latestExtractionRequestID == requestID else {
+                        return
+                    }
+
+                    extractionResult = result
+                    if shouldAutoExpandResultAfterNextRefresh {
+                        isResultCollapsed = false
+                        shouldAutoExpandResultAfterNextRefresh = false
+                        expressionEditorFocusRequest += 1
+                    }
+                    extractionRefreshTask = nil
+                }
+            }
         }
 
         extractionRefreshTask = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + autoRefreshDelay, execute: workItem)
+        let delay = immediate ? 0 : autoRefreshDelay(for: mode)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
 
     private func handleExtractionQueryChange(from oldValue: String, to newValue: String) {
@@ -658,11 +545,12 @@ struct EditorContainerView: View {
         let newIsEmpty = newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
         if oldIsEmpty && !newIsEmpty {
-            isResultCollapsed = false
-            expressionEditorFocusRequest += 1
+            shouldAutoExpandResultAfterNextRefresh = true
+            return
         } else if !oldIsEmpty && newIsEmpty {
             extractionResult = .idle
             isResultCollapsed = true
+            shouldAutoExpandResultAfterNextRefresh = false
             expressionEditorFocusRequest += 1
         }
     }
@@ -670,6 +558,31 @@ struct EditorContainerView: View {
     private func cancelPendingExtractionRefresh() {
         extractionRefreshTask?.cancel()
         extractionRefreshTask = nil
+        latestExtractionRequestID &+= 1
+    }
+
+    private func updatePreparedExtractionInput() {
+        guard !editorText.isEmpty,
+              validationIssue == nil else {
+            preparedExtractionInput = nil
+            return
+        }
+
+        preparedExtractionInput = try? JSONExtractionService.prepare(input: editorText)
+    }
+
+    private func autoRefreshDelay(for mode: ExtractionMode) -> TimeInterval {
+        switch mode {
+        case .javaScript:
+            return javaScriptAutoRefreshDelay
+        case .jsonPath:
+            return jsonPathAutoRefreshDelay
+        }
+    }
+
+    private func nextExtractionRequestID() -> UInt64 {
+        latestExtractionRequestID &+= 1
+        return latestExtractionRequestID
     }
 
     private func copyExtractionResult() {
@@ -696,5 +609,211 @@ struct EditorContainerView: View {
 
         toastDismissTask = dismissTask
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.4, execute: dismissTask)
+    }
+}
+
+private struct RawJSONEditorPanel: View {
+    @Binding var editorText: String
+    let validationIssue: JSONValidationIssue?
+    let errorHighlight: EditorErrorHighlight?
+    let errorRevealToken: Int
+    let panelHeaderHeight: CGFloat
+    let onEditingEnded: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Text("Original JSON")
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer()
+
+                if let validationIssue {
+                    Text(validationIssue.displayMessage)
+                        .font(.caption)
+                        .foregroundStyle(Color.errorRed)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(height: panelHeaderHeight)
+            .background(.bar)
+
+            Divider()
+
+            JSONTextEditor(
+                text: $editorText,
+                errorHighlight: errorHighlight,
+                errorRevealToken: errorRevealToken,
+                onEditingEnded: onEditingEnded
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(Color.editorBackground)
+    }
+}
+
+private struct ExtractionResultPanel: View {
+    let result: ExtractionRunResult
+    @Binding var isCollapsed: Bool
+    let statusText: String
+    let statusColor: Color
+    let panelHeaderHeight: CGFloat
+    let collapseSymbolName: String
+    let collapseHelpText: String
+    let onCopy: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Text("Extraction Result")
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer()
+
+                Text(statusText)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(statusColor)
+
+                Button("Copy", action: onCopy)
+                    .buttonStyle(.borderless)
+                    .disabled(!result.canCopy)
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        isCollapsed.toggle()
+                    }
+                } label: {
+                    Image(systemName: collapseSymbolName)
+                        .font(.caption.weight(.semibold))
+                        .frame(width: 18, height: 18)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .help(collapseHelpText)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: panelHeaderHeight)
+            .background(.bar)
+
+            if !isCollapsed {
+                Divider()
+
+                if result.usesStructuredEditor {
+                    JSONTextEditor(
+                        text: .constant(result.text),
+                        isEditable: false
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        Text(verbatim: result.text)
+                            .font(.system(size: 13, weight: .regular, design: .monospaced))
+                            .foregroundStyle(.primary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .background(Color.editorBackground)
+                }
+            }
+        }
+        .background(Color.editorBackground)
+    }
+}
+
+private struct ExpressionEditorPanel: View {
+    @Binding var extractionMode: ExtractionMode
+    @Binding var extractionQuery: String
+    @Binding var isCollapsed: Bool
+    let canRunExtraction: Bool
+    let extractionHint: String
+    let extractionHintColor: Color
+    let focusRequestToken: Int
+    let panelHeaderHeight: CGFloat
+    let onRun: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Text("Expression Editor")
+                    .font(.subheadline.weight(.semibold))
+
+                Picker("Mode", selection: $extractionMode) {
+                    ForEach(ExtractionMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 220)
+
+                Spacer()
+
+                Button(action: onRun) {
+                    HStack(spacing: 6) {
+                        Text("Run")
+                        Text("⌘↩")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(!canRunExtraction)
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        isCollapsed.toggle()
+                    }
+                } label: {
+                    Image(systemName: isCollapsed ? "chevron.down" : "chevron.up")
+                        .font(.caption.weight(.semibold))
+                        .frame(width: 18, height: 18)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .help(isCollapsed ? "展开代码编辑区" : "折叠代码编辑区")
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(.bar)
+
+            if !isCollapsed {
+                Divider()
+
+                ZStack(alignment: .topLeading) {
+                    ExpressionTextEditor(
+                        text: $extractionQuery,
+                        onRun: onRun,
+                        focusRequestToken: focusRequestToken
+                    )
+
+                    if extractionQuery.isEmpty {
+                        Text(extractionMode.placeholder)
+                            .font(.system(size: 13, weight: .regular, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 16)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.editorBackground)
+
+                Divider()
+
+                HStack {
+                    Text(extractionHint)
+                        .font(.caption)
+                        .foregroundStyle(extractionHintColor)
+                        .lineLimit(1)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.bar)
+            }
+        }
+        .background(Color.editorBackground)
     }
 }
