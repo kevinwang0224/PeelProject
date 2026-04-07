@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        :root {
+            --editor-background: transparent;
+            --error-line-background: #ff000010;
+            --error-token-background: #ff000024;
+            --error-border: #ff3b30ff;
+        }
+
+        html, body, #editor {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: var(--editor-background);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        .peel-error-line {
+            background: var(--error-line-background);
+        }
+
+        .peel-error-token {
+            background: var(--error-token-background);
+            border-bottom: 1px dotted var(--error-border);
+            box-sizing: border-box;
+        }
+
+        #placeholder {
+            position: absolute;
+            top: 13px;
+            left: 12px;
+            pointer-events: none;
+            font-family: SFMono-Regular, Menlo, Monaco, monospace;
+            font-size: 14px;
+            color: rgba(128, 128, 128, 0.5);
+            display: none;
+            white-space: pre;
+        }
+    </style>
+</head>
+<body>
+    <div id="editor"></div>
+    <div id="placeholder"></div>
+    <script src="./vs/loader.js"></script>
+    <script>
+        const bridge = window.webkit?.messageHandlers?.peelEditor;
+        const post = (type, payload = {}) => {
+            bridge?.postMessage({ type, ...payload });
+        };
+
+        let editor;
+        let model;
+        let currentDecorations = [];
+        let lastRevealToken = -1;
+        let suppressChange = false;
+        let currentPlaceholder = "";
+
+        const placeholderEl = document.getElementById("placeholder");
+
+        function updatePlaceholderVisibility() {
+            if (!placeholderEl) return;
+            if (currentPlaceholder && model && model.getValue().length === 0) {
+                placeholderEl.textContent = currentPlaceholder;
+                placeholderEl.style.display = "";
+            } else {
+                placeholderEl.style.display = "none";
+            }
+        }
+
+        function tryPrettyJSON(value) {
+            try {
+                return JSON.stringify(JSON.parse(value), null, 2);
+            } catch (_) {
+                return value;
+            }
+        }
+
+        function positionAt(offset) {
+            return model.getPositionAt(Math.max(offset, 0));
+        }
+
+        function applyTheme(theme) {
+            const themeName = theme.variant === "dark" ? "peel-dark" : "peel-light";
+
+            monaco.editor.defineTheme(themeName, {
+                base: theme.variant === "dark" ? "vs-dark" : "vs",
+                inherit: true,
+                rules: [
+                    { token: "string.key.json", foreground: theme.key.slice(1, 7) },
+                    { token: "string.value.json", foreground: theme.string.slice(1, 7) },
+                    { token: "number", foreground: theme.number.slice(1, 7) },
+                    { token: "keyword.json", foreground: theme.boolean.slice(1, 7) },
+                    { token: "delimiter.bracket.json", foreground: theme.brace.slice(1, 7) }
+                ],
+                colors: {
+                    "editor.background": theme.background,
+                    "editor.foreground": theme.defaultText,
+                    "editorLineNumber.foreground": theme.lineNumber,
+                    "editorLineNumber.activeForeground": theme.defaultText,
+                    "editorCursor.foreground": theme.cursor,
+                    "editor.selectionBackground": theme.selectionBackground,
+                    "editor.inactiveSelectionBackground": theme.inactiveSelectionBackground,
+                    "editorIndentGuide.background1": theme.indentGuide,
+                    "scrollbarSlider.background": theme.scrollbar,
+                    "scrollbarSlider.hoverBackground": theme.scrollbar,
+                    "scrollbarSlider.activeBackground": theme.scrollbar
+                }
+            });
+
+            monaco.editor.setTheme(themeName);
+            document.documentElement.style.setProperty("--editor-background", theme.background);
+            document.documentElement.style.setProperty("--error-line-background", theme.errorLineBackground);
+            document.documentElement.style.setProperty("--error-token-background", theme.errorTokenBackground);
+            document.documentElement.style.setProperty("--error-border", theme.errorBorder);
+        }
+
+        function applyErrorHighlight(errorHighlight, revealToken) {
+            if (!editor || !model) {
+                return;
+            }
+
+            const decorations = [];
+            if (errorHighlight) {
+                const tokenStart = positionAt(errorHighlight.tokenStart);
+                const tokenEnd = positionAt(errorHighlight.tokenEnd);
+                const lineStart = positionAt(errorHighlight.lineStart);
+                const lineEnd = positionAt(errorHighlight.lineEnd);
+
+                decorations.push({
+                    range: new monaco.Range(lineStart.lineNumber, 1, lineEnd.lineNumber, 1),
+                    options: {
+                        isWholeLine: true,
+                        className: "peel-error-line"
+                    }
+                });
+
+                decorations.push({
+                    range: new monaco.Range(
+                        tokenStart.lineNumber,
+                        tokenStart.column,
+                        tokenEnd.lineNumber,
+                        tokenEnd.column
+                    ),
+                    options: {
+                        inlineClassName: "peel-error-token",
+                        hoverMessage: errorHighlight.message ? { value: errorHighlight.message } : undefined
+                    }
+                });
+
+                if (revealToken !== lastRevealToken) {
+                    editor.revealRangeInCenterIfOutsideViewport(
+                        new monaco.Range(
+                            tokenStart.lineNumber,
+                            tokenStart.column,
+                            tokenEnd.lineNumber,
+                            tokenEnd.column
+                        )
+                    );
+                    lastRevealToken = revealToken;
+                }
+            }
+
+            currentDecorations = editor.deltaDecorations(currentDecorations, decorations);
+        }
+
+        function applyState(state) {
+            if (!editor || !model) {
+                return;
+            }
+
+            applyTheme(state.theme);
+
+            if (state.language && model.getLanguageId() !== state.language) {
+                monaco.editor.setModelLanguage(model, state.language);
+            }
+
+            if (state.placeholder !== undefined) {
+                currentPlaceholder = state.placeholder || "";
+                updatePlaceholderVisibility();
+            }
+
+            editor.updateOptions({
+                readOnly: !state.isEditable,
+                domReadOnly: !state.isEditable
+            });
+
+            if (model.getValue() !== state.text) {
+                const viewState = editor.saveViewState();
+                suppressChange = true;
+                model.setValue(state.text);
+                suppressChange = false;
+                if (viewState) {
+                    editor.restoreViewState(viewState);
+                }
+            }
+
+            updatePlaceholderVisibility();
+            applyErrorHighlight(state.errorHighlight, state.errorRevealToken);
+        }
+
+        function getSelectionText() {
+            if (!editor || !model) {
+                return "";
+            }
+
+            const selection = editor.getSelection();
+            if (!selection) {
+                return model.getValue();
+            }
+
+            const selectedText = model.getValueInRange(selection);
+            return selectedText.length > 0 ? selectedText : model.getValue();
+        }
+
+        function cutSelection() {
+            if (!editor || !model || editor.getOption(monaco.editor.EditorOption.readOnly)) {
+                return "";
+            }
+
+            const selection = editor.getSelection();
+            if (!selection) {
+                return "";
+            }
+
+            const selectedText = model.getValueInRange(selection);
+            if (!selectedText.length) {
+                return "";
+            }
+
+            editor.pushUndoStop();
+            editor.executeEdits("peel-cut", [
+                { range: selection, text: "", forceMoveMarkers: true }
+            ]);
+            editor.pushUndoStop();
+            return selectedText;
+        }
+
+        function pasteText(rawText) {
+            if (!editor || !model || editor.getOption(monaco.editor.EditorOption.readOnly)) {
+                return false;
+            }
+
+            const selection = editor.getSelection() || model.getFullModelRange();
+            const text = tryPrettyJSON(rawText);
+            editor.pushUndoStop();
+            editor.executeEdits("peel-paste", [
+                { range: selection, text, forceMoveMarkers: true }
+            ]);
+            editor.pushUndoStop();
+            return true;
+        }
+
+        function installPasteTransform() {
+            const container = document.getElementById("editor");
+            container.addEventListener(
+                "paste",
+                (event) => {
+                    const pastedText = event.clipboardData?.getData("text/plain");
+                    if (typeof pastedText !== "string" || !pastedText.length) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    pasteText(pastedText);
+                },
+                true
+            );
+        }
+
+        function boot() {
+            require.config({
+                paths: {
+                    vs: "./vs"
+                }
+            });
+
+            require(["vs/editor/editor.main"], () => {
+                monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
+                    validate: false,
+                    allowComments: false,
+                    schemas: [],
+                    enableSchemaRequest: false
+                });
+
+                monaco.languages.typescript.javascriptDefaults.addExtraLib(
+                    "declare var data: any;",
+                    "ts:filename/data.d.ts"
+                );
+                monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+                    noSemanticValidation: false,
+                    noSyntaxValidation: false
+                });
+
+                model = monaco.editor.createModel(
+                    "",
+                    "json",
+                    monaco.Uri.parse(`inmemory://peel/${Date.now()}-${Math.random().toString(16).slice(2)}.json`)
+                );
+
+                editor = monaco.editor.create(document.getElementById("editor"), {
+                    model,
+                    automaticLayout: true,
+                    wordWrap: "on",
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    fontSize: 14,
+                    fontFamily: "SFMono-Regular, Menlo, Monaco, monospace",
+                    lineNumbers: "on",
+                    glyphMargin: false,
+                    folding: true,
+                    overviewRulerBorder: false,
+                    renderLineHighlight: "none",
+                    tabSize: 4,
+                    insertSpaces: true,
+                    padding: { top: 12, bottom: 12 }
+                });
+
+                editor.addCommand(
+                    monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
+                    () => { post("run"); }
+                );
+
+                editor.onDidChangeModelContent(() => {
+                    if (suppressChange) {
+                        return;
+                    }
+
+                    updatePlaceholderVisibility();
+                    post("change", { text: model.getValue() });
+                });
+
+                editor.onDidFocusEditorWidget(() => {
+                    post("focus");
+                });
+
+                editor.onDidBlurEditorWidget(() => {
+                    post("blur");
+                });
+
+                installPasteTransform();
+
+                window.PeelMonaco = {
+                    applyState,
+                    focus() {
+                        editor?.focus();
+                    },
+                    copySelectionOrAll() {
+                        return getSelectionText();
+                    },
+                    cutSelection() {
+                        return cutSelection();
+                    },
+                    pasteText(rawText) {
+                        return pasteText(rawText);
+                    },
+                    selectAll() {
+                        editor?.trigger("peel", "editor.action.selectAll");
+                    },
+                    showFind() {
+                        editor?.getAction("actions.find")?.run();
+                    }
+                };
+
+                post("ready");
+            });
+        }
+
+        boot();
+    </script>
+</body>
+</html>

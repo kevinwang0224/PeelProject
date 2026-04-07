@@ -27,6 +27,10 @@ targets:
     platform: macOS
     sources:
       - path: Peel
+        excludes:
+          - Resources/Monaco/**
+      - path: Peel/Resources/Monaco
+        type: folder
   PeelTests:
     type: bundle.unit-test
     platform: macOS

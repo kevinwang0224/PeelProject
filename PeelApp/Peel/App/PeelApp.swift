@@ -237,10 +237,18 @@ final class JSONWorkspace {
     }
 
     func performCutCommand() {
+        if MonacoEditorCommandCenter.shared.performCut() {
+            return
+        }
+
         _ = NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: nil)
     }
 
     func performCopyCommand() {
+        if MonacoEditorCommandCenter.shared.performCopy() {
+            return
+        }
+
         if NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil) {
             return
         }
@@ -253,6 +261,11 @@ final class JSONWorkspace {
     }
 
     func performPasteCommand() {
+        if let pasted = NSPasteboard.general.string(forType: .string),
+           MonacoEditorCommandCenter.shared.performPaste(pasted) {
+            return
+        }
+
         if NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil) {
             return
         }
@@ -280,10 +293,18 @@ final class JSONWorkspace {
     }
 
     func performSelectAllCommand() {
+        if MonacoEditorCommandCenter.shared.performSelectAll() {
+            return
+        }
+
         _ = NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
     }
 
     func performFocusedJSONFindCommand() {
+        if MonacoEditorCommandCenter.shared.performFind() {
+            return
+        }
+
         guard let textView = NSApp.keyWindow?.firstResponder as? JSONFormattingTextView else {
             return
         }

@@ -641,7 +641,8 @@ private struct RawJSONEditorPanel: View {
 
             Divider()
 
-            JSONTextEditor(
+            MonacoJSONTextEditor(
+                role: .rawJSON,
                 text: $editorText,
                 errorHighlight: errorHighlight,
                 errorRevealToken: errorRevealToken,
@@ -700,7 +701,8 @@ private struct ExtractionResultPanel: View {
                 Divider()
 
                 if result.usesStructuredEditor {
-                    JSONTextEditor(
+                    MonacoJSONTextEditor(
+                        role: .extractionResult,
                         text: .constant(result.text),
                         isEditable: false
                     )
@@ -780,22 +782,15 @@ private struct ExpressionEditorPanel: View {
             if !isCollapsed {
                 Divider()
 
-                ZStack(alignment: .topLeading) {
-                    ExpressionTextEditor(
-                        text: $extractionQuery,
-                        onRun: onRun,
-                        focusRequestToken: focusRequestToken
-                    )
-
-                    if extractionQuery.isEmpty {
-                        Text(extractionMode.placeholder)
-                            .font(.system(size: 13, weight: .regular, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 16)
-                            .allowsHitTesting(false)
-                    }
-                }
+                MonacoJSONTextEditor(
+                    role: .expressionEditor,
+                    text: $extractionQuery,
+                    language: extractionMode == .javaScript ? "javascript" : "plaintext",
+                    placeholder: extractionMode.placeholder,
+                    errorHighlight: nil,
+                    focusRequestToken: focusRequestToken,
+                    onRun: onRun
+                )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.editorBackground)
 
