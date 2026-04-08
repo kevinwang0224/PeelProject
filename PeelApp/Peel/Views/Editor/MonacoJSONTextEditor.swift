@@ -355,7 +355,11 @@ private struct MonacoThemePayload: Encodable {
         boolean = theme.boolean.hexRGBA
         nullColor = theme.null.hexRGBA
         brace = theme.brace.hexRGBA
-        lineNumber = NSColor.secondaryLabelColor.hexRGBA
+        if theme.variant == .dark {
+            lineNumber = theme.defaultText.withAlphaComponent(0.68).hexRGBA
+        } else {
+            lineNumber = NSColor.secondaryLabelColor.hexRGBA
+        }
         cursor = theme.defaultText.hexRGBA
         selectionBackground = NSColor.selectedTextBackgroundColor.withAlphaComponent(0.28).hexRGBA
         inactiveSelectionBackground = NSColor.selectedTextBackgroundColor.withAlphaComponent(0.16).hexRGBA
