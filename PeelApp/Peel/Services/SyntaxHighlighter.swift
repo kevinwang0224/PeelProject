@@ -38,7 +38,7 @@ struct SyntaxHighlighter {
             boolean: NSColor(red: 0.78, green: 0.57, blue: 0.86, alpha: 1.0),
             null: .systemGray,
             brace: NSColor(red: 0.85, green: 0.85, blue: 0.85, alpha: 1.0),
-            background: NSColor(red: 0.12, green: 0.12, blue: 0.14, alpha: 1.0),
+            background: .textBackgroundColor,
             defaultText: NSColor(red: 0.85, green: 0.85, blue: 0.85, alpha: 1.0)
         )
     }
