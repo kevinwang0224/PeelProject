@@ -33,7 +33,7 @@ final class MonacoEditorPool {
 
 @MainActor
 final class PooledEditor {
-    private(set) var webView: WKWebView
+    private(set) var webView: PeelMonacoWebView
     private let messageProxy = MonacoMessageProxy()
 
     private(set) var isReady = false
@@ -48,7 +48,7 @@ final class PooledEditor {
         configuration.userContentController = contentController
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
 
-        webView = WKWebView(frame: .zero, configuration: configuration)
+        webView = PeelMonacoWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = false
         webView.setValue(false, forKey: "drawsBackground")
     }
@@ -100,5 +100,19 @@ final class MonacoMessageProxy: NSObject, WKScriptMessageHandler {
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         handler?(message)
+    }
+}
+
+/// WKWebView subclass for the Monaco editor pool.
+/// Disables the focus ring so the editor blends into the native layout.
+final class PeelMonacoWebView: WKWebView {
+    override init(frame: CGRect, configuration: WKWebViewConfiguration) {
+        super.init(frame: frame, configuration: configuration)
+        focusRingType = .none
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        focusRingType = .none
     }
 }

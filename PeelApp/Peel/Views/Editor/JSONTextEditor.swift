@@ -9,6 +9,8 @@ struct EditorErrorHighlight: Equatable {
 }
 
 struct JSONTextEditor: NSViewRepresentable {
+    @Environment(EditorLayoutSettings.self) private var editorLayoutSettings
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var text: String
     var isEditable: Bool = true
     var errorHighlight: EditorErrorHighlight?
@@ -34,10 +36,14 @@ struct JSONTextEditor: NSViewRepresentable {
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.usesFindBar = true
         textView.isIncrementalSearchingEnabled = true
-        textView.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
-        textView.textColor = SyntaxHighlighter.currentTheme().defaultText
+        textView.font = .monospacedSystemFont(
+            ofSize: editorLayoutSettings.editorFontSize,
+            weight: .regular
+        )
+        let theme = SyntaxHighlighter.currentTheme(for: colorScheme)
+        textView.textColor = theme.defaultText
         textView.textContainerInset = NSSize(width: 12, height: 12)
-        textView.backgroundColor = SyntaxHighlighter.currentTheme().background
+        textView.backgroundColor = theme.background
         textView.drawsBackground = true
         textView.autoresizingMask = [.width]
         textView.isHorizontallyResizable = false
@@ -61,7 +67,7 @@ struct JSONTextEditor: NSViewRepresentable {
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
 
-        context.coordinator.setText(text, theme: SyntaxHighlighter.currentTheme())
+        context.coordinator.setText(text, theme: theme)
         return scrollView
     }
 
@@ -71,7 +77,7 @@ struct JSONTextEditor: NSViewRepresentable {
         }
 
         context.coordinator.parent = self
-        let theme = SyntaxHighlighter.currentTheme()
+        let theme = SyntaxHighlighter.currentTheme(for: colorScheme)
         textView.isEditable = isEditable
         textView.backgroundColor = theme.background
         textView.textColor = theme.defaultText
@@ -91,6 +97,7 @@ struct JSONTextEditor: NSViewRepresentable {
         }
     }
 
+    @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: JSONTextEditor
         weak var textView: JSONFormattingTextView?
@@ -116,7 +123,7 @@ struct JSONTextEditor: NSViewRepresentable {
             isUpdating = true
             parent.text = textView.string
             parent.onTextChange?(textView.string)
-            applyHighlighting(theme: SyntaxHighlighter.currentTheme())
+            applyHighlighting(theme: SyntaxHighlighter.currentTheme(for: parent.colorScheme))
             isUpdating = false
         }
 
@@ -153,7 +160,10 @@ struct JSONTextEditor: NSViewRepresentable {
             }
 
             let selectedRanges = textView.selectedRanges
-            let font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+            let font = NSFont.monospacedSystemFont(
+                ofSize: parent.editorLayoutSettings.editorFontSize,
+                weight: .regular
+            )
             let highlighted = NSMutableAttributedString(
                 attributedString: SyntaxHighlighter.highlight(
                     textView.string,
@@ -189,6 +199,8 @@ struct JSONTextEditor: NSViewRepresentable {
             textView.textStorage?.beginEditing()
             textView.textStorage?.setAttributedString(highlighted)
             textView.textStorage?.endEditing()
+            textView.font = font
+            textView.backgroundColor = theme.background
             textView.textColor = theme.defaultText
             textView.selectedRanges = selectedRanges
             lastHighlightedText = textView.string

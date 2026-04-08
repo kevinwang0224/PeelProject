@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct StatusBarView: View {
+    @Environment(EditorLayoutSettings.self) private var editorLayoutSettings
     let isValid: Bool
     let jsonType: String
     let byteSize: String
@@ -22,7 +23,7 @@ struct StatusBarView: View {
                 Text(isValid ? "Valid" : "Invalid")
             }
         }
-        .font(.caption)
+        .font(editorLayoutSettings.uiFont(11))
         .foregroundStyle(.secondary)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

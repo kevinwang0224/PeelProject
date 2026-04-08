@@ -84,10 +84,13 @@ final class MonacoEditorCommandCenter {
 }
 
 struct MonacoJSONTextEditor: NSViewRepresentable {
+    @Environment(EditorLayoutSettings.self) private var editorLayoutSettings
+    @Environment(\.colorScheme) private var colorScheme
     let role: MonacoEditorPool.Role
     @Binding var text: String
     var isEditable: Bool = true
     var language: String = "json"
+    var fontSize: Int = Int(EditorLayoutSettings.defaultFontSize)
     var placeholder: String? = nil
     var errorHighlight: EditorErrorHighlight?
     var errorRevealToken: Int = 0
@@ -100,33 +103,22 @@ struct MonacoJSONTextEditor: NSViewRepresentable {
         Coordinator(parent: self, pooledEditor: MonacoEditorPool.shared.editor(for: role))
     }
 
-    func makeNSView(context: Context) -> NSView {
-        let container = NSView()
+    func makeNSView(context: Context) -> WKWebView {
         let webView = context.coordinator.pooledEditor.webView
         webView.removeFromSuperview()
-        webView.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(webView)
-        NSLayoutConstraint.activate([
-            webView.topAnchor.constraint(equalTo: container.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: container.trailingAnchor)
-        ])
-
         context.coordinator.attach()
-        return container
+        return webView
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {
+    func updateNSView(_ nsView: WKWebView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.applyStateIfNeeded()
         context.coordinator.applyFocusRequestIfNeeded(focusRequestToken)
     }
 
-    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+    static func dismantleNSView(_ nsView: WKWebView, coordinator: Coordinator) {
         coordinator.detach()
         MonacoEditorCommandCenter.shared.unregisterFocusedEditor(coordinator)
-        nsView.subviews.forEach { $0.removeFromSuperview() }
     }
 
     @MainActor
@@ -173,10 +165,13 @@ struct MonacoJSONTextEditor: NSViewRepresentable {
                 text: parent.text,
                 isEditable: parent.isEditable,
                 language: parent.language,
+                fontSize: parent.fontSize,
                 placeholder: parent.placeholder,
                 errorHighlight: MonacoErrorHighlightPayload(parent.errorHighlight),
                 errorRevealToken: parent.errorRevealToken,
-                theme: MonacoThemePayload(theme: SyntaxHighlighter.currentTheme())
+                theme: MonacoThemePayload(
+                    theme: SyntaxHighlighter.currentTheme(for: parent.colorScheme)
+                )
             )
 
             guard let data = try? JSONEncoder().encode(payload),
@@ -299,6 +294,7 @@ private struct MonacoEditorStatePayload: Encodable {
     let text: String
     let isEditable: Bool
     let language: String
+    let fontSize: Int
     let placeholder: String?
     let errorHighlight: MonacoErrorHighlightPayload?
     let errorRevealToken: Int
@@ -346,6 +342,8 @@ private struct MonacoThemePayload: Encodable {
     let errorBorder: String
 
     init(theme: SyntaxHighlighter.Theme) {
+        let appearance = theme.appearance
+
         variant = theme.variant == .dark ? "dark" : "light"
         background = theme.background.hexRGBA
         defaultText = theme.defaultText.hexRGBA
@@ -356,22 +354,53 @@ private struct MonacoThemePayload: Encodable {
         nullColor = theme.null.hexRGBA
         brace = theme.brace.hexRGBA
         if theme.variant == .dark {
-            lineNumber = theme.defaultText.withAlphaComponent(0.68).hexRGBA
+            lineNumber = NSColor.secondaryLabelColor
+                .resolved(for: appearance)
+                .withAlphaComponent(0.68)
+                .hexRGBA
         } else {
-            lineNumber = NSColor.secondaryLabelColor.hexRGBA
+            lineNumber = NSColor.secondaryLabelColor
+                .resolved(for: appearance)
+                .hexRGBA
         }
         cursor = theme.defaultText.hexRGBA
-        selectionBackground = NSColor.selectedTextBackgroundColor.withAlphaComponent(0.28).hexRGBA
-        inactiveSelectionBackground = NSColor.selectedTextBackgroundColor.withAlphaComponent(0.16).hexRGBA
-        indentGuide = NSColor.separatorColor.withAlphaComponent(0.26).hexRGBA
-        scrollbar = NSColor.tertiaryLabelColor.withAlphaComponent(0.24).hexRGBA
-        errorLineBackground = NSColor.systemRed.withAlphaComponent(0.06).hexRGBA
-        errorTokenBackground = NSColor.systemRed.withAlphaComponent(0.14).hexRGBA
-        errorBorder = NSColor.systemRed.hexRGBA
+        selectionBackground = NSColor.selectedTextBackgroundColor
+            .resolved(for: appearance)
+            .withAlphaComponent(0.28)
+            .hexRGBA
+        inactiveSelectionBackground = NSColor.selectedTextBackgroundColor
+            .resolved(for: appearance)
+            .withAlphaComponent(0.16)
+            .hexRGBA
+        indentGuide = NSColor.separatorColor
+            .resolved(for: appearance)
+            .withAlphaComponent(0.26)
+            .hexRGBA
+        scrollbar = NSColor.tertiaryLabelColor
+            .resolved(for: appearance)
+            .withAlphaComponent(0.24)
+            .hexRGBA
+        errorLineBackground = NSColor.systemRed
+            .resolved(for: appearance)
+            .withAlphaComponent(0.06)
+            .hexRGBA
+        errorTokenBackground = NSColor.systemRed
+            .resolved(for: appearance)
+            .withAlphaComponent(0.14)
+            .hexRGBA
+        errorBorder = NSColor.systemRed.resolved(for: appearance).hexRGBA
     }
 }
 
 private extension NSColor {
+    func resolved(for appearance: NSAppearance) -> NSColor {
+        var resolvedColor = self
+        appearance.performAsCurrentDrawingAppearance {
+            resolvedColor = usingColorSpace(.deviceRGB) ?? self
+        }
+        return resolvedColor
+    }
+
     var hexRGBA: String {
         guard let color = usingColorSpace(.deviceRGB) else {
             return "#000000FF"

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct HistoryRowView: View {
+    @Environment(EditorLayoutSettings.self) private var editorLayoutSettings
     let item: HistoryItem
 
     var body: some View {
@@ -8,27 +9,27 @@ struct HistoryRowView: View {
             HStack(spacing: 6) {
                 if item.isPinned {
                     Image(systemName: "pin.fill")
-                        .font(.caption2)
+                        .font(editorLayoutSettings.uiFont(9))
                         .foregroundStyle(.secondary)
 //                        .foregroundStyle(.orange)
                 }
 
                 Text(item.title)
-                    .font(.system(.body, weight: .medium))
+                    .font(editorLayoutSettings.uiFont(12, weight: .medium))
                     .lineLimit(1)
             }
 
             HStack(spacing: 6) {
                 Text(item.rawJSON.jsonByteSize)
-                    .font(.caption)
+                    .font(editorLayoutSettings.uiFont(11))
                     .foregroundStyle(.secondary)
 
                 Text("·")
-                    .font(.caption)
+                    .font(editorLayoutSettings.uiFont(11))
                     .foregroundStyle(.secondary)
 
                 Text(item.updatedAt.timeAgoDisplay())
-                    .font(.caption)
+                    .font(editorLayoutSettings.uiFont(11))
                     .foregroundStyle(.secondary)
             }
         }

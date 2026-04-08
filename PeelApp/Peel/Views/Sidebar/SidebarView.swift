@@ -4,6 +4,7 @@ import SwiftUI
 
 struct SidebarView: View {
     @Environment(JSONWorkspace.self) private var workspace
+    @Environment(EditorLayoutSettings.self) private var editorLayoutSettings
     @Environment(\.modelContext) private var modelContext
     @Query(sort: [SortDescriptor(\HistoryItem.updatedAt, order: .reverse)]) private var items: [HistoryItem]
 
@@ -33,11 +34,11 @@ struct SidebarView: View {
         filteredItems.filter { !$0.isPinned }
     }
 
-    private var selection: Binding<UUID?> {
-        Binding<UUID?>(
-            get: { selectedItem?.id },
-            set: { newID in
-                selectedItem = items.first { $0.id == newID }
+    private var selection: Binding<PersistentIdentifier?> {
+        Binding<PersistentIdentifier?>(
+            get: { selectedItem?.persistentModelID },
+            set: { (newID: PersistentIdentifier?) in
+                selectedItem = items.first { $0.persistentModelID == newID }
             }
         )
     }
@@ -55,7 +56,7 @@ struct SidebarView: View {
             Section("History") {
                 if unpinnedItems.isEmpty {
                     Text(searchText.isEmpty ? "No history yet" : "No matching items")
-                        .font(.caption)
+                        .font(editorLayoutSettings.uiFont(11))
                         .foregroundStyle(.secondary)
                         .padding(.vertical, 8)
                 } else {
@@ -91,7 +92,7 @@ struct SidebarView: View {
                    HStack {
                        SettingsLink {
                            Label("Settings", systemImage: "gearshape")
-                               .font(.system(size: 12))
+                               .font(editorLayoutSettings.uiFont(12))
                                .foregroundStyle(.secondary)
                        }
                        .buttonStyle(.plain)
@@ -120,7 +121,7 @@ struct SidebarView: View {
 
     private func historyRow(for item: HistoryItem) -> some View {
         HistoryRowView(item: item)
-            .tag(item.id)
+            .tag(item.persistentModelID)
             .contentShape(Rectangle())
             .contextMenu {
                 Button(item.isPinned ? "Unpin" : "Pin") {

@@ -1,11 +1,21 @@
 import AppKit
 import Foundation
+import SwiftUI
 
 struct SyntaxHighlighter {
     struct Theme {
         enum Variant {
             case light
             case dark
+
+            var appearance: NSAppearance {
+                switch self {
+                case .light:
+                    return NSAppearance(named: .aqua)!
+                case .dark:
+                    return NSAppearance(named: .darkAqua)!
+                }
+            }
         }
 
         let variant: Variant
@@ -18,29 +28,33 @@ struct SyntaxHighlighter {
         let background: NSColor
         let defaultText: NSColor
 
-        static let light = Theme(
-            variant: .light,
-            key: NSColor(red: 0.16, green: 0.30, blue: 0.60, alpha: 1.0),
-            string: NSColor(red: 0.76, green: 0.24, blue: 0.16, alpha: 1.0),
-            number: NSColor(red: 0.11, green: 0.51, blue: 0.47, alpha: 1.0),
-            boolean: NSColor(red: 0.61, green: 0.15, blue: 0.69, alpha: 1.0),
-            null: .systemGray,
-            brace: .labelColor,
-            background: .textBackgroundColor,
-            defaultText: .labelColor
-        )
+        var appearance: NSAppearance {
+            variant.appearance
+        }
 
-        static let dark = Theme(
-            variant: .dark,
-            key: NSColor(red: 0.58, green: 0.79, blue: 0.93, alpha: 1.0),
-            string: NSColor(red: 0.81, green: 0.56, blue: 0.42, alpha: 1.0),
-            number: NSColor(red: 0.71, green: 0.84, blue: 0.59, alpha: 1.0),
-            boolean: NSColor(red: 0.78, green: 0.57, blue: 0.86, alpha: 1.0),
-            null: .systemGray,
-            brace: NSColor(red: 0.85, green: 0.85, blue: 0.85, alpha: 1.0),
-            background: .textBackgroundColor,
-            defaultText: NSColor(red: 0.85, green: 0.85, blue: 0.85, alpha: 1.0)
-        )
+        static func make(variant: Variant) -> Theme {
+            let appearance = variant.appearance
+
+            return Theme(
+                variant: variant,
+                key: variant == .dark
+                    ? NSColor(red: 0.58, green: 0.79, blue: 0.93, alpha: 1.0)
+                    : NSColor(red: 0.16, green: 0.30, blue: 0.60, alpha: 1.0),
+                string: variant == .dark
+                    ? NSColor(red: 0.81, green: 0.56, blue: 0.42, alpha: 1.0)
+                    : NSColor(red: 0.76, green: 0.24, blue: 0.16, alpha: 1.0),
+                number: variant == .dark
+                    ? NSColor(red: 0.71, green: 0.84, blue: 0.59, alpha: 1.0)
+                    : NSColor(red: 0.11, green: 0.51, blue: 0.47, alpha: 1.0),
+                boolean: variant == .dark
+                    ? NSColor(red: 0.78, green: 0.57, blue: 0.86, alpha: 1.0)
+                    : NSColor(red: 0.61, green: 0.15, blue: 0.69, alpha: 1.0),
+                null: NSColor.systemGray.resolved(for: appearance),
+                brace: NSColor.labelColor.resolved(for: appearance),
+                background: NSColor.textBackgroundColor.resolved(for: appearance),
+                defaultText: NSColor.labelColor.resolved(for: appearance)
+            )
+        }
     }
 
     private enum RegexStore {
@@ -128,13 +142,8 @@ struct SyntaxHighlighter {
         return attributed
     }
 
-    static func currentTheme() -> Theme {
-        guard let app = NSApp else {
-            return .light
-        }
-
-        let isDark = app.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        return isDark ? .dark : .light
+    static func currentTheme(for colorScheme: ColorScheme) -> Theme {
+        Theme.make(variant: colorScheme == .dark ? .dark : .light)
     }
 
     private static func applyMatches(
@@ -152,5 +161,15 @@ struct SyntaxHighlighter {
         }
 
         return regex
+    }
+}
+
+private extension NSColor {
+    func resolved(for appearance: NSAppearance) -> NSColor {
+        var resolvedColor = self
+        appearance.performAsCurrentDrawingAppearance {
+            resolvedColor = usingColorSpace(.deviceRGB) ?? self
+        }
+        return resolvedColor
     }
 }

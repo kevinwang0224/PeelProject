@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(JSONWorkspace.self) private var workspace
+    @Environment(EditorLayoutSettings.self) private var editorLayoutSettings
 
     var body: some View {
         @Bindable var workspace = workspace
@@ -59,6 +60,7 @@ struct ContentView: View {
             }
         }
         .animation(.spring(duration: 0.28), value: workspace.noticeMessage)
+        .font(editorLayoutSettings.uiFont(12))
     }
 
     private var emptyState: some View {

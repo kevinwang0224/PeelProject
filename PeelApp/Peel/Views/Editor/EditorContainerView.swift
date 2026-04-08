@@ -63,6 +63,7 @@ struct EditorContainerView: View {
                 keyCount: keyCount
             )
         }
+        .font(editorLayoutSettings.uiFont(12))
         .background(Color.editorBackground)
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
@@ -102,7 +103,7 @@ struct EditorContainerView: View {
         .overlay(alignment: .topTrailing) {
             if let toastMessage {
                 Text(toastMessage)
-                    .font(.callout.weight(.medium))
+                    .font(editorLayoutSettings.uiFont(12, weight: .medium))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(.regularMaterial, in: Capsule())
@@ -158,7 +159,7 @@ struct EditorContainerView: View {
         if selectedItem != nil {
             TextField("JSON Title", text: $titleDraft)
                         .textFieldStyle(.plain) // 1. 改为 plain 样式，移除那个笨重的圆角黑框
-                        .font(.system(size: 13, weight: .semibold)) // 2. 稍微加粗，模仿原生标题感
+                        .font(editorLayoutSettings.uiFont(13, weight: .semibold)) // 2. 稍微加粗，模仿原生标题感
                         .foregroundStyle(.primary)
                         // 3. 核心：增加左侧间距
                         .padding(.leading, 12)
@@ -243,7 +244,7 @@ struct EditorContainerView: View {
                 }
             } label: {
                 Image(systemName: "chevron.left")
-                    .font(.caption.weight(.semibold))
+                    .font(editorLayoutSettings.uiFont(11, weight: .semibold))
                     .frame(width: 18, height: 18)
                     .contentShape(Rectangle())
             }
@@ -254,7 +255,7 @@ struct EditorContainerView: View {
             Spacer()
 
             Text("Result")
-                .font(.caption.weight(.medium))
+                .font(editorLayoutSettings.uiFont(11, weight: .medium))
                 .foregroundStyle(.secondary)
                 .rotationEffect(.degrees(90))
 
@@ -303,7 +304,7 @@ struct EditorContainerView: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: symbolName)
-                .font(.caption.weight(.semibold))
+                .font(editorLayoutSettings.uiFont(11, weight: .semibold))
                 .frame(width: 18, height: 18)
                 .contentShape(Rectangle())
         }
@@ -613,6 +614,7 @@ struct EditorContainerView: View {
 }
 
 private struct RawJSONEditorPanel: View {
+    @Environment(EditorLayoutSettings.self) private var editorLayoutSettings
     @Binding var editorText: String
     let validationIssue: JSONValidationIssue?
     let errorHighlight: EditorErrorHighlight?
@@ -624,13 +626,13 @@ private struct RawJSONEditorPanel: View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 Text("Original JSON")
-                    .font(.subheadline.weight(.semibold))
+                    .font(editorLayoutSettings.uiFont(12, weight: .semibold))
 
                 Spacer()
 
                 if let validationIssue {
                     Text(validationIssue.displayMessage)
-                        .font(.caption)
+                        .font(editorLayoutSettings.uiFont(11))
                         .foregroundStyle(Color.errorRed)
                         .lineLimit(1)
                 }
@@ -644,6 +646,7 @@ private struct RawJSONEditorPanel: View {
             MonacoJSONTextEditor(
                 role: .rawJSON,
                 text: $editorText,
+                fontSize: editorLayoutSettings.editorMonacoFontSize,
                 errorHighlight: errorHighlight,
                 errorRevealToken: errorRevealToken,
                 onEditingEnded: onEditingEnded
@@ -655,6 +658,7 @@ private struct RawJSONEditorPanel: View {
 }
 
 private struct ExtractionResultPanel: View {
+    @Environment(EditorLayoutSettings.self) private var editorLayoutSettings
     let result: ExtractionRunResult
     @Binding var isCollapsed: Bool
     let statusText: String
@@ -668,12 +672,12 @@ private struct ExtractionResultPanel: View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 Text("Extraction Result")
-                    .font(.subheadline.weight(.semibold))
+                    .font(editorLayoutSettings.uiFont(12, weight: .semibold))
 
                 Spacer()
 
                 Text(statusText)
-                    .font(.caption.weight(.medium))
+                    .font(editorLayoutSettings.uiFont(11, weight: .medium))
                     .foregroundStyle(statusColor)
 
                 Button("Copy", action: onCopy)
@@ -686,7 +690,7 @@ private struct ExtractionResultPanel: View {
                     }
                 } label: {
                     Image(systemName: collapseSymbolName)
-                        .font(.caption.weight(.semibold))
+                        .font(editorLayoutSettings.uiFont(11, weight: .semibold))
                         .frame(width: 18, height: 18)
                         .contentShape(Rectangle())
                 }
@@ -704,13 +708,14 @@ private struct ExtractionResultPanel: View {
                     MonacoJSONTextEditor(
                         role: .extractionResult,
                         text: .constant(result.text),
-                        isEditable: false
+                        isEditable: false,
+                        fontSize: editorLayoutSettings.editorMonacoFontSize
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ScrollView {
                         Text(verbatim: result.text)
-                            .font(.system(size: 13, weight: .regular, design: .monospaced))
+                            .font(editorLayoutSettings.editorFont())
                             .foregroundStyle(.primary)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -726,6 +731,7 @@ private struct ExtractionResultPanel: View {
 }
 
 private struct ExpressionEditorPanel: View {
+    @Environment(EditorLayoutSettings.self) private var editorLayoutSettings
     @Binding var extractionMode: ExtractionMode
     @Binding var extractionQuery: String
     @Binding var isCollapsed: Bool
@@ -740,7 +746,7 @@ private struct ExpressionEditorPanel: View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 Text("Expression Editor")
-                    .font(.subheadline.weight(.semibold))
+                    .font(editorLayoutSettings.uiFont(12, weight: .semibold))
 
                 Picker("Mode", selection: $extractionMode) {
                     ForEach(ExtractionMode.allCases) { mode in
@@ -756,7 +762,7 @@ private struct ExpressionEditorPanel: View {
                     HStack(spacing: 6) {
                         Text("Run")
                         Text("⌘↩")
-                            .font(.caption2.weight(.medium))
+                            .font(editorLayoutSettings.uiFont(10, weight: .medium))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -768,7 +774,7 @@ private struct ExpressionEditorPanel: View {
                     }
                 } label: {
                     Image(systemName: isCollapsed ? "chevron.down" : "chevron.up")
-                        .font(.caption.weight(.semibold))
+                        .font(editorLayoutSettings.uiFont(11, weight: .semibold))
                         .frame(width: 18, height: 18)
                         .contentShape(Rectangle())
                 }
@@ -786,6 +792,7 @@ private struct ExpressionEditorPanel: View {
                     role: .expressionEditor,
                     text: $extractionQuery,
                     language: extractionMode == .javaScript ? "javascript" : "plaintext",
+                    fontSize: editorLayoutSettings.editorMonacoFontSize,
                     placeholder: extractionMode.placeholder,
                     errorHighlight: nil,
                     focusRequestToken: focusRequestToken,
@@ -798,7 +805,7 @@ private struct ExpressionEditorPanel: View {
 
                 HStack {
                     Text(extractionHint)
-                        .font(.caption)
+                        .font(editorLayoutSettings.uiFont(11))
                         .foregroundStyle(extractionHintColor)
                         .lineLimit(1)
 

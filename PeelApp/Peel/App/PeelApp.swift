@@ -8,6 +8,8 @@ import UniformTypeIdentifiers
 struct PeelApp: App {
     @State private var workspace = JSONWorkspace()
     @State private var editorLayoutSettings = EditorLayoutSettings()
+    @State private var settingsNavigationState = SettingsNavigationState()
+    @State private var systemAppearanceMonitor = SystemAppearanceMonitor()
     @StateObject private var quickPasteController = QuickPasteController()
 
     var body: some Scene {
@@ -15,7 +17,14 @@ struct PeelApp: App {
             MainWindowRootView(
                 workspace: workspace,
                 editorLayoutSettings: editorLayoutSettings,
+                systemAppearanceMonitor: systemAppearanceMonitor,
                 quickPasteController: quickPasteController
+            )
+            .environment(systemAppearanceMonitor)
+            .preferredColorScheme(
+                editorLayoutSettings.appThemePreference.resolvedColorScheme(
+                    systemColorScheme: systemAppearanceMonitor.colorScheme
+                )
             )
         }
         .modelContainer(for: HistoryItem.self)
@@ -30,8 +39,15 @@ struct PeelApp: App {
         }
 
         Settings {
-            QuickPasteSettingsView(controller: quickPasteController)
+            PeelSettingsView(controller: quickPasteController)
                 .environment(editorLayoutSettings)
+                .environment(settingsNavigationState)
+                .environment(systemAppearanceMonitor)
+                .preferredColorScheme(
+                    editorLayoutSettings.appThemePreference.resolvedColorScheme(
+                        systemColorScheme: systemAppearanceMonitor.colorScheme
+                    )
+                )
         }
     }
 }
@@ -54,6 +70,7 @@ final class JSONWorkspace {
 
     func bind(modelContext: ModelContext) {
         self.modelContext = modelContext
+        repairDuplicateHistoryItemIDsIfNeeded()
         removeEmptyHistoryItems()
         restoreSelectionIfNeeded()
     }
@@ -414,6 +431,34 @@ final class JSONWorkspace {
         return trimmedTitle
     }
 
+    private func repairDuplicateHistoryItemIDsIfNeeded() {
+        guard let modelContext else {
+            return
+        }
+
+        let descriptor = FetchDescriptor<HistoryItem>()
+        guard let items = try? modelContext.fetch(descriptor), !items.isEmpty else {
+            return
+        }
+
+        var seen = Set<UUID>()
+        var hasChanges = false
+
+        for item in items {
+            if seen.contains(item.id) {
+                item.id = UUID()
+                hasChanges = true
+            }
+            seen.insert(item.id)
+        }
+
+        guard hasChanges else {
+            return
+        }
+
+        try? modelContext.save()
+    }
+
     private func removeEmptyHistoryItems() {
         guard let modelContext else {
             return
@@ -491,8 +536,7 @@ final class JSONWorkspace {
     }
 
     private func bringMainWindowToFront() {
-        NSRunningApplication.current.activate(options: [.activateIgnoringOtherApps])
-        NSApp.activate(ignoringOtherApps: true)
+        NSRunningApplication.current.activate()
 
         guard let window = mainWindows.first ?? NSApp.windows.first(where: \.canBecomeMain) else {
             return
@@ -512,6 +556,7 @@ private struct MainWindowRootView: View {
 
     let workspace: JSONWorkspace
     let editorLayoutSettings: EditorLayoutSettings
+    let systemAppearanceMonitor: SystemAppearanceMonitor
     let quickPasteController: QuickPasteController
 
     var body: some View {
@@ -519,6 +564,12 @@ private struct MainWindowRootView: View {
             .environment(workspace)
             .environment(editorLayoutSettings)
             .background(MainWindowMarker())
+            .background(
+                WindowThemeConfigurator(
+                    themePreference: editorLayoutSettings.appThemePreference,
+                    systemColorScheme: systemAppearanceMonitor.colorScheme
+                )
+            )
             .task {
                 workspace.bindMainWindowOpener {
                     openWindow(id: JSONWorkspace.mainWindowSceneID)

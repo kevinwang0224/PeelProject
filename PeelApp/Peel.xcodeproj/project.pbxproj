@@ -10,6 +10,7 @@
 		2274C2227585B7F6EF442656 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DF04A8BF3B1D4724E2EA6C4 /* SidebarView.swift */; };
 		3875564A5B66E8449BDD42F7 /* QuickPasteShortcut.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B7364D25A00E533FA335F1E /* QuickPasteShortcut.swift */; };
 		3B66AA51DB61A919243D0E94 /* HistoryRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 335B8D2055509F80BA77366E /* HistoryRowView.swift */; };
+		3BDA11891938A06888AFD3BD /* WindowThemeConfigurator.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB9B088D4DB952F4E51AC8F2 /* WindowThemeConfigurator.swift */; };
 		3F6448CF67E7A18D8B498E0D /* JSONExtractionServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BF46DFB60B574C9CDB3591E /* JSONExtractionServiceTests.swift */; };
 		3F897D87E7D1FEEF353E19DC /* MonacoJSONTextEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E2F159FF5FFD3528922CEC2 /* MonacoJSONTextEditor.swift */; };
 		58D8DAFA5D8318266FEE4430 /* PeelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1914FDA4A39AB2F4C6157B95 /* PeelApp.swift */; };
@@ -74,6 +75,7 @@
 		BA7A975612A2909337CBC96D /* PeelTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PeelTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D4465B76E6D66BD258116EB0 /* JSONExtractionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONExtractionService.swift; sourceTree = "<group>"; };
 		E4662436EFDEDEE40204D08B /* QuickPasteSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickPasteSettingsView.swift; sourceTree = "<group>"; };
+		EB9B088D4DB952F4E51AC8F2 /* WindowThemeConfigurator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowThemeConfigurator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -170,6 +172,7 @@
 			isa = PBXGroup;
 			children = (
 				6E89A457006CF9F1D8014169 /* ContentView.swift */,
+				EB9B088D4DB952F4E51AC8F2 /* WindowThemeConfigurator.swift */,
 				222810CB141E66C7326DF888 /* Editor */,
 				B51D28F30034F600263B0B3E /* Settings */,
 				764BA566F5ED2A01EBE23FB2 /* Sidebar */,
@@ -254,8 +257,6 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
-				TargetAttributes = {
-				};
 			};
 			buildConfigurationList = 078262014B44372A34E27C8E /* Build configuration list for PBXProject "Peel" */;
 			developmentRegion = en;
@@ -315,6 +316,7 @@
 				AFC2EECB2BD844BB906BB12F /* StatusBarView.swift in Sources */,
 				5C716A3481E7249A1CBA6C5F /* String+JSON.swift in Sources */,
 				70E49463E00C976EE912401F /* SyntaxHighlighter.swift in Sources */,
+				3BDA11891938A06888AFD3BD /* WindowThemeConfigurator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -411,7 +413,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Peel;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.2.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -421,6 +423,7 @@
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.9;
+				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Debug;
 		};
@@ -494,7 +497,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Peel;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.2.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.peel.app;
@@ -503,6 +506,7 @@
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.9;
+				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
 		};

@@ -17,6 +17,9 @@
             height: 100%;
             overflow: hidden;
             background: var(--editor-background);
+            -webkit-user-drag: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         body {
@@ -122,6 +125,19 @@
             document.documentElement.style.setProperty("--error-border", theme.errorBorder);
         }
 
+        function applyFontSize(fontSize) {
+            if (!editor || !placeholderEl) {
+                return;
+            }
+
+            const resolvedFontSize = Math.max(10, Number(fontSize) || 12);
+            editor.updateOptions({
+                fontSize: resolvedFontSize,
+                lineHeight: Math.round(resolvedFontSize * 1.6)
+            });
+            placeholderEl.style.fontSize = `${resolvedFontSize}px`;
+        }
+
         function applyErrorHighlight(errorHighlight, revealToken) {
             if (!editor || !model) {
                 return;
@@ -177,6 +193,7 @@
             }
 
             applyTheme(state.theme);
+            applyFontSize(state.fontSize);
 
             if (state.language && model.getLanguageId() !== state.language) {
                 monaco.editor.setModelLanguage(model, state.language);
@@ -275,6 +292,61 @@
             );
         }
 
+        function isNativeTextInput(target) {
+            return target instanceof HTMLInputElement ||
+                target instanceof HTMLTextAreaElement ||
+                target?.isContentEditable === true;
+        }
+
+        function clearNativeSelectionIfNeeded(container) {
+            const activeElement = document.activeElement;
+            if (isNativeTextInput(activeElement)) {
+                return;
+            }
+
+            const selection = window.getSelection();
+            if (!selection || selection.rangeCount === 0) {
+                return;
+            }
+
+            const anchorNode = selection.anchorNode;
+            const focusNode = selection.focusNode;
+            const anchorElement = anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement;
+            const focusElement = focusNode instanceof Element ? focusNode : focusNode?.parentElement;
+            if ((anchorElement && container.contains(anchorElement)) ||
+                (focusElement && container.contains(focusElement))) {
+                selection.removeAllRanges();
+            }
+        }
+
+        function suppressNativeTrackpadSelection() {
+            const container = document.getElementById("editor");
+            if (!container) {
+                return;
+            }
+
+            const preventNativeSelection = (event) => {
+                if (isNativeTextInput(event.target)) {
+                    return;
+                }
+
+                event.preventDefault();
+            };
+
+            container.addEventListener("selectstart", preventNativeSelection, true);
+            container.addEventListener("dragstart", (event) => {
+                if (isNativeTextInput(event.target)) {
+                    return;
+                }
+
+                event.preventDefault();
+            }, true);
+
+            document.addEventListener("selectionchange", () => {
+                clearNativeSelectionIfNeeded(container);
+            });
+        }
+
         function boot() {
             require.config({
                 paths: {
@@ -320,7 +392,8 @@
                     renderLineHighlight: "none",
                     tabSize: 4,
                     insertSpaces: true,
-                    padding: { top: 12, bottom: 12 }
+                    padding: { top: 12, bottom: 12 },
+                    dragAndDrop: false
                 });
 
                 editor.addCommand(
@@ -346,6 +419,7 @@
                 });
 
                 installPasteTransform();
+                suppressNativeTrackpadSelection();
 
                 window.PeelMonaco = {
                     applyState,
