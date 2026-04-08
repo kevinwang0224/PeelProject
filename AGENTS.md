@@ -4,10 +4,11 @@
 
 ## 项目定位
 
-`Peel` 是原生 macOS JSON 格式化和编辑工具，目标是轻量、启动快、界面简洁、零第三方依赖，只使用 Apple 自带框架。
+`Peel` 是原生 macOS JSON 格式化和编辑工具，目标是轻量、启动快、界面简洁。
 - 当前有效工程在 `PeelApp/`
 - 应用源码在 `PeelApp/Peel/`
 - 旧 `Peel/` 路径在淘汰，后续不要恢复旧目录
+- 编辑器方案已切到 `Monaeditor（Monaco）`，不要再按旧 `NSTextView` 主方案设计新功能
 
 ## 关键目录
 
@@ -18,6 +19,9 @@
 - `PeelApp/Peel/Services/`：格式化、提取、语法高亮、全局快捷键
 - `PeelApp/Peel/Views/Sidebar/`：左侧历史记录
 - `PeelApp/Peel/Views/Editor/`：原始 JSON、提取结果、表达式编辑
+- `PeelApp/Peel/Views/Editor/MonacoJSONTextEditor.swift`：Monaeditor 的 SwiftUI 封装
+- `PeelApp/Peel/Views/Editor/MonacoEditorPool.swift`：编辑器实例池与复用
+- `PeelApp/Peel/Resources/Monaco/`：Monaeditor 静态资源与许可文件
 - `PeelApp/Peel/Views/Settings/`：设置页
 - `PeelApp/PeelTests/`：最小自动检查
 
@@ -25,7 +29,7 @@
 
 - 全局状态集中在 `JSONWorkspace`
 - 历史记录使用 SwiftData
-- 编辑器基于 `NSTextView`，不要破坏语法高亮和错误定位
+- 编辑器主流程基于 `Monaeditor（Monaco）`，不要破坏高亮、错误定位、复制粘贴、查找、运行快捷键
 - JSON 处理统一走 `JSONFormatterService`
 - JSON 提取统一走 `JSONExtractionService`，支持 JavaScript 和 JSONPath
 - 编辑内容会自动写回当前记录，不是手动保存模式
@@ -41,7 +45,8 @@
 - 改项目设置、target、构建参数时，优先改 `PeelApp/project.yml`
 - 改了项目配置后，记得重新生成工程
 - 只要动了功能或工程配置，优先跑 `xcodebuild test`，不要只做 build
-- 继续保持零第三方依赖，优先使用系统框架
+- 不要把编辑器主流程改回 `NSTextView`；涉及编辑器改动时，优先在 Monaeditor 方案内完成
+- 改动 `PeelApp/Peel/Resources/Monaco/` 时，同步检查许可与声明文件是否需要更新
 - 不提交 `build/`、`DerivedData/`、`xcuserdata/`、`.xcuserstate` 等本机生成内容
 - 功能范围、目录结构或验证方式变了时，顺手更新本文件
 
