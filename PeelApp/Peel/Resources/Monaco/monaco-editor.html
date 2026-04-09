@@ -68,6 +68,7 @@
         const mouseInteractionGuardState = {
             active: false,
             dragging: false,
+            multiClick: false,
             pointerId: null,
             lastPrimaryInteractionAt: 0
         };
@@ -309,22 +310,8 @@
                 (target.classList.contains("inputarea") || target.closest(".inputarea") !== null);
         }
 
-        function isMonacoIMEInput(target) {
-            return target instanceof Element &&
-                (target.classList.contains("ime-input") || target.closest(".ime-input") !== null);
-        }
-
         function notePrimaryInteraction() {
             mouseInteractionGuardState.lastPrimaryInteractionAt = performance.now();
-        }
-
-        function shouldCollapseHiddenInputSelection() {
-            if (mouseInteractionGuardState.dragging) {
-                return false;
-            }
-
-            return mouseInteractionGuardState.active ||
-                (performance.now() - mouseInteractionGuardState.lastPrimaryInteractionAt) < 400;
         }
 
         function shouldGuardEditorMouseDown(target, container) {
@@ -332,7 +319,7 @@
                 return false;
             }
 
-            if (isNativeTextInput(target) && !isMonacoHiddenInput(target)) {
+            if (isNativeTextInput(target)) {
                 return false;
             }
 
@@ -341,22 +328,8 @@
 
         function clearNativeSelectionIfNeeded(container) {
             const activeElement = document.activeElement;
-            if (isNativeTextInput(activeElement) && !isMonacoHiddenInput(activeElement)) {
+            if (isNativeTextInput(activeElement)) {
                 return;
-            }
-
-            if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
-                const shouldCollapseInputSelection = container.contains(activeElement) &&
-                    isMonacoHiddenInput(activeElement) &&
-                    !isMonacoIMEInput(activeElement) &&
-                    shouldCollapseHiddenInputSelection();
-
-                if (shouldCollapseInputSelection &&
-                    activeElement.selectionStart !== null &&
-                    activeElement.selectionEnd !== null &&
-                    activeElement.selectionStart !== activeElement.selectionEnd) {
-                    activeElement.setSelectionRange(activeElement.selectionEnd, activeElement.selectionEnd);
-                }
             }
 
             const selection = window.getSelection();
@@ -381,7 +354,7 @@
             }
 
             const preventNativeSelection = (event) => {
-                if (isNativeTextInput(event.target) && !isMonacoHiddenInput(event.target)) {
+                if (isNativeTextInput(event.target)) {
                     return;
                 }
 
@@ -390,7 +363,7 @@
 
             container.addEventListener("selectstart", preventNativeSelection, true);
             container.addEventListener("dragstart", (event) => {
-                if (isNativeTextInput(event.target) && !isMonacoHiddenInput(event.target)) {
+                if (isNativeTextInput(event.target)) {
                     return;
                 }
 
@@ -413,6 +386,7 @@
             const clearInteractionState = () => {
                 mouseInteractionGuardState.active = false;
                 mouseInteractionGuardState.dragging = false;
+                mouseInteractionGuardState.multiClick = false;
                 mouseInteractionGuardState.pointerId = null;
             };
 
@@ -427,6 +401,7 @@
 
                 mouseInteractionGuardState.active = true;
                 mouseInteractionGuardState.dragging = false;
+                mouseInteractionGuardState.multiClick = event.detail > 1;
                 mouseInteractionGuardState.pointerId = "pointerId" in event ? event.pointerId : null;
                 mouseInteractionGuardState.x = event.clientX;
                 mouseInteractionGuardState.y = event.clientY;
@@ -457,6 +432,14 @@
                 const dx = event.clientX - mouseInteractionGuardState.x;
                 const dy = event.clientY - mouseInteractionGuardState.y;
                 if ((dx * dx) + (dy * dy) >= DRAG_THRESHOLD_SQ) {
+                    if (mouseInteractionGuardState.multiClick) {
+                        notePrimaryInteraction();
+                        event.preventDefault();
+                        event.stopPropagation();
+                        event.stopImmediatePropagation();
+                        return;
+                    }
+
                     mouseInteractionGuardState.dragging = true;
                     return;
                 }

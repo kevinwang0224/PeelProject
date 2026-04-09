@@ -47,7 +47,6 @@ final class PooledEditor {
         let configuration = WKWebViewConfiguration()
         configuration.userContentController = contentController
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-        configuration.preferences.isTextInteractionEnabled = false
 
         webView = WKWebView(frame: .zero, configuration: configuration)
         webView.focusRingType = .none
