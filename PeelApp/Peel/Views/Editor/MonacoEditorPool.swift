@@ -53,6 +53,11 @@ final class PooledEditor {
         webView.allowsMagnification = false
         webView.allowsBackForwardNavigationGestures = false
         webView.setValue(false, forKey: "drawsBackground")
+        // #if DEBUG
+        // if #available(macOS 13.3, *) {
+        //     webView.isInspectable = true
+        // }
+        // #endif
     }
 
     func loadPage() {

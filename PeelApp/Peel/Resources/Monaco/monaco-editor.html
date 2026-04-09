@@ -475,7 +475,192 @@
             window.addEventListener("blur", clearInteractionState, true);
         }
 
+        function installPointerCaptureGuard() {
+            // WKWebView + trackpad "tap to click" bug:
+            // Tap-to-click generates pointerdown/mousedown with buttons=0 (no physical
+            // button held). Monaco's GlobalPointerMoveMonitor stores this initial
+            // buttons value (0) and checks `pointermove.buttons !== initial` to detect
+            // drag end. Since subsequent pointermove also has buttons=0, the check
+            // (0 !== 0) never triggers, so Monaco treats any post-tap finger movement
+            // as an infinite drag — causing unwanted text selection.
+            //
+            // Fix: detect the tap-to-click signature (pointerdown with button=0,
+            // buttons=0), then block all pointermove events and release any active
+            // pointer capture until pointerup/mouseup fires.
+            let tapToClickActive = false;
+            let safetyTimer = null;
+
+            window.addEventListener("pointerdown", (e) => {
+                if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = null; }
+                if (e.button === 0 && e.isTrusted && e.buttons === 0) {
+                    tapToClickActive = true;
+                    safetyTimer = setTimeout(() => { tapToClickActive = false; }, 2000);
+                } else {
+                    tapToClickActive = false;
+                }
+            }, true);
+
+            for (const evt of ["pointerup", "mouseup"]) {
+                window.addEventListener(evt, (e) => {
+                    if (e.button === 0) {
+                        tapToClickActive = false;
+                        if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = null; }
+                    }
+                }, true);
+            }
+
+            window.addEventListener("pointermove", (e) => {
+                if (tapToClickActive && e.isTrusted) {
+                    e.stopImmediatePropagation();
+                    e.preventDefault();
+                    try { e.target.releasePointerCapture(e.pointerId); } catch (_) {}
+                }
+            }, true);
+        }
+
+        function installSelectionDiagnostics() {
+            if (!editor) {
+                return;
+            }
+
+            const diagLog = [];
+            const MAX_LOG = 200;
+            let lastDownTime = 0;
+
+            function ts() {
+                return (performance.now() | 0) + "ms";
+            }
+
+            let diagOverlay = null;
+            let diagOverlayVisible = false;
+
+            function push(msg) {
+                if (diagLog.length >= MAX_LOG) {
+                    diagLog.shift();
+                }
+                diagLog.push(msg);
+                console.log("[DIAG]", msg);
+                if (diagOverlayVisible && diagOverlay) {
+                    diagOverlay.textContent = diagLog.slice(-60).join("\n");
+                    diagOverlay.scrollTop = diagOverlay.scrollHeight;
+                }
+            }
+
+            for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel",
+                                 "mousedown", "mousemove", "mouseup"]) {
+                window.addEventListener(type, (e) => {
+                    const isDown = type.endsWith("down");
+                    const isMove = type.endsWith("move");
+
+                    if (isDown) {
+                        lastDownTime = performance.now();
+                    }
+
+                    if (isMove) {
+                        return;
+                    }
+
+                    const sinceLast = lastDownTime ? `+${((performance.now() - lastDownTime) | 0)}ms` : "";
+                    push(`${ts()} ${type} buttons=${e.buttons} btn=${e.button} detail=${e.detail} `
+                        + `xy=(${e.clientX|0},${e.clientY|0}) `
+                        + (e.pointerId !== undefined ? `pid=${e.pointerId} ` : "")
+                        + `trusted=${e.isTrusted} ${sinceLast}`);
+                }, true);
+            }
+
+            let moveLogTimer = null;
+            let moveCount = 0;
+            let lastMoveButtons = -1;
+            let lastMoveType = "";
+            window.addEventListener("pointermove", (e) => {
+                moveCount++;
+                lastMoveButtons = e.buttons;
+                lastMoveType = "pointermove";
+                if (!moveLogTimer) {
+                    moveLogTimer = setTimeout(() => {
+                        const sinceLast = lastDownTime ? `+${((performance.now() - lastDownTime) | 0)}ms` : "";
+                        push(`${ts()} ${lastMoveType}(x${moveCount}) buttons=${lastMoveButtons} ${sinceLast}`);
+                        moveCount = 0;
+                        moveLogTimer = null;
+                    }, 100);
+                }
+            }, true);
+
+            window.addEventListener("mousemove", (e) => {
+                moveCount++;
+                lastMoveButtons = e.buttons;
+                lastMoveType = "mousemove";
+            }, true);
+
+            editor.onDidChangeCursorSelection((e) => {
+                const sel = editor.getSelection();
+                if (!sel) {
+                    return;
+                }
+                const sinceLast = lastDownTime ? `+${((performance.now() - lastDownTime) | 0)}ms` : "";
+                const isEmpty = sel.isEmpty();
+                const text = isEmpty ? "(empty)" : model.getValueInRange(sel).slice(0, 40);
+                push(`${ts()} [MONACO SEL] empty=${isEmpty} `
+                    + `range=${sel.startLineNumber}:${sel.startColumn}-${sel.endLineNumber}:${sel.endColumn} `
+                    + `reason=${e.reason} source="${e.source}" `
+                    + `text="${text}" ${sinceLast}`);
+            });
+
+            document.addEventListener("selectionchange", () => {
+                const sel = window.getSelection();
+                if (!sel || sel.rangeCount === 0) {
+                    return;
+                }
+                const text = sel.toString();
+                if (!text.length) {
+                    return;
+                }
+                const sinceLast = lastDownTime ? `+${((performance.now() - lastDownTime) | 0)}ms` : "";
+                push(`${ts()} [NATIVE SEL] text="${text.slice(0, 40)}" rangeCount=${sel.rangeCount} ${sinceLast}`);
+            });
+
+            window.addEventListener("wheel", (e) => {
+                push(`${ts()} wheel deltaY=${e.deltaY|0}`);
+            }, { capture: true, passive: true });
+
+            diagOverlay = document.createElement("div");
+            diagOverlay.id = "diag-overlay";
+            diagOverlay.style.cssText = "position:fixed;bottom:0;left:0;right:0;height:30%;background:rgba(0,0,0,0.88);"
+                + "color:#0f0;font:11px/1.4 SFMono-Regular,Menlo,monospace;overflow-y:auto;z-index:99999;"
+                + "padding:6px 8px;pointer-events:auto;white-space:pre;";
+            document.body.appendChild(diagOverlay);
+            diagOverlayVisible = true;
+
+            window.__peelDiag = {
+                dump() {
+                    return diagLog.join("\n");
+                },
+                clear() {
+                    diagLog.length = 0;
+                    if (diagOverlay) {
+                        diagOverlay.textContent = "";
+                    }
+                },
+                show() {
+                    diagOverlayVisible = true;
+                    if (diagOverlay) {
+                        diagOverlay.style.display = "";
+                        diagOverlay.textContent = diagLog.slice(-60).join("\n");
+                        diagOverlay.scrollTop = diagOverlay.scrollHeight;
+                    }
+                },
+                hide() {
+                    diagOverlayVisible = false;
+                    if (diagOverlay) {
+                        diagOverlay.style.display = "none";
+                    }
+                }
+            };
+        }
+
         function boot() {
+            installPointerCaptureGuard();
+
             require.config({
                 paths: {
                     vs: "./vs"
@@ -553,6 +738,7 @@
 
                 installPasteTransform();
                 suppressNativeTrackpadSelection();
+                // installSelectionDiagnostics();
 
                 window.PeelMonaco = {
                     applyState,
