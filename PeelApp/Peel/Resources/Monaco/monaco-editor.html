@@ -65,6 +65,12 @@
         let lastRevealToken = -1;
         let suppressChange = false;
         let currentPlaceholder = "";
+        const mouseInteractionGuardState = {
+            active: false,
+            dragging: false,
+            pointerId: null,
+            lastPrimaryInteractionAt: 0
+        };
 
         const placeholderEl = document.getElementById("placeholder");
 
@@ -298,10 +304,59 @@
                 target?.isContentEditable === true;
         }
 
+        function isMonacoHiddenInput(target) {
+            return target instanceof Element &&
+                (target.classList.contains("inputarea") || target.closest(".inputarea") !== null);
+        }
+
+        function isMonacoIMEInput(target) {
+            return target instanceof Element &&
+                (target.classList.contains("ime-input") || target.closest(".ime-input") !== null);
+        }
+
+        function notePrimaryInteraction() {
+            mouseInteractionGuardState.lastPrimaryInteractionAt = performance.now();
+        }
+
+        function shouldCollapseHiddenInputSelection() {
+            if (mouseInteractionGuardState.dragging) {
+                return false;
+            }
+
+            return mouseInteractionGuardState.active ||
+                (performance.now() - mouseInteractionGuardState.lastPrimaryInteractionAt) < 400;
+        }
+
+        function shouldGuardEditorMouseDown(target, container) {
+            if (!(target instanceof Element) || !container.contains(target)) {
+                return false;
+            }
+
+            if (isNativeTextInput(target) && !isMonacoHiddenInput(target)) {
+                return false;
+            }
+
+            return !target.closest(".scrollbar");
+        }
+
         function clearNativeSelectionIfNeeded(container) {
             const activeElement = document.activeElement;
-            if (isNativeTextInput(activeElement)) {
+            if (isNativeTextInput(activeElement) && !isMonacoHiddenInput(activeElement)) {
                 return;
+            }
+
+            if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
+                const shouldCollapseInputSelection = container.contains(activeElement) &&
+                    isMonacoHiddenInput(activeElement) &&
+                    !isMonacoIMEInput(activeElement) &&
+                    shouldCollapseHiddenInputSelection();
+
+                if (shouldCollapseInputSelection &&
+                    activeElement.selectionStart !== null &&
+                    activeElement.selectionEnd !== null &&
+                    activeElement.selectionStart !== activeElement.selectionEnd) {
+                    activeElement.setSelectionRange(activeElement.selectionEnd, activeElement.selectionEnd);
+                }
             }
 
             const selection = window.getSelection();
@@ -326,7 +381,7 @@
             }
 
             const preventNativeSelection = (event) => {
-                if (isNativeTextInput(event.target)) {
+                if (isNativeTextInput(event.target) && !isMonacoHiddenInput(event.target)) {
                     return;
                 }
 
@@ -335,7 +390,7 @@
 
             container.addEventListener("selectstart", preventNativeSelection, true);
             container.addEventListener("dragstart", (event) => {
-                if (isNativeTextInput(event.target)) {
+                if (isNativeTextInput(event.target) && !isMonacoHiddenInput(event.target)) {
                     return;
                 }
 
@@ -345,6 +400,96 @@
             document.addEventListener("selectionchange", () => {
                 clearNativeSelectionIfNeeded(container);
             });
+        }
+
+        function installMouseInteractionGuard() {
+            const container = document.getElementById("editor");
+            if (!container) {
+                return;
+            }
+
+            const DRAG_THRESHOLD_SQ = 16;
+
+            const clearInteractionState = () => {
+                mouseInteractionGuardState.active = false;
+                mouseInteractionGuardState.dragging = false;
+                mouseInteractionGuardState.pointerId = null;
+            };
+
+            const beginInteraction = (event) => {
+                if (!event.isTrusted ||
+                    event.button !== 0 ||
+                    ("isPrimary" in event && event.isPrimary === false) ||
+                    !shouldGuardEditorMouseDown(event.target, container)) {
+                    clearInteractionState();
+                    return;
+                }
+
+                mouseInteractionGuardState.active = true;
+                mouseInteractionGuardState.dragging = false;
+                mouseInteractionGuardState.pointerId = "pointerId" in event ? event.pointerId : null;
+                mouseInteractionGuardState.x = event.clientX;
+                mouseInteractionGuardState.y = event.clientY;
+                notePrimaryInteraction();
+            };
+
+            const handleMove = (event) => {
+                if (!mouseInteractionGuardState.active) {
+                    return;
+                }
+
+                if ("pointerId" in event &&
+                    mouseInteractionGuardState.pointerId !== null &&
+                    event.pointerId !== mouseInteractionGuardState.pointerId) {
+                    return;
+                }
+
+                if ((event.buttons & 1) === 0) {
+                    notePrimaryInteraction();
+                    clearInteractionState();
+                    return;
+                }
+
+                if (mouseInteractionGuardState.dragging) {
+                    return;
+                }
+
+                const dx = event.clientX - mouseInteractionGuardState.x;
+                const dy = event.clientY - mouseInteractionGuardState.y;
+                if ((dx * dx) + (dy * dy) >= DRAG_THRESHOLD_SQ) {
+                    mouseInteractionGuardState.dragging = true;
+                    return;
+                }
+
+                notePrimaryInteraction();
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+            };
+
+            const endInteraction = (event) => {
+                if (!mouseInteractionGuardState.active) {
+                    return;
+                }
+
+                if ("pointerId" in event &&
+                    mouseInteractionGuardState.pointerId !== null &&
+                    event.pointerId !== mouseInteractionGuardState.pointerId) {
+                    return;
+                }
+
+                notePrimaryInteraction();
+                clearInteractionState();
+            };
+
+            container.addEventListener("pointerdown", beginInteraction, true);
+            container.addEventListener("mousedown", beginInteraction, true);
+            document.addEventListener("pointermove", handleMove, true);
+            document.addEventListener("mousemove", handleMove, true);
+            document.addEventListener("pointerup", endInteraction, true);
+            document.addEventListener("mouseup", endInteraction, true);
+            document.addEventListener("pointercancel", clearInteractionState, true);
+            window.addEventListener("blur", clearInteractionState, true);
         }
 
         function boot() {
@@ -377,12 +522,15 @@
                     monaco.Uri.parse(`inmemory://peel/${Date.now()}-${Math.random().toString(16).slice(2)}.json`)
                 );
 
+                installMouseInteractionGuard();
+
                 editor = monaco.editor.create(document.getElementById("editor"), {
                     model,
                     automaticLayout: true,
                     wordWrap: "on",
                     minimap: { enabled: false },
                     scrollBeyondLastLine: false,
+                    smoothScrolling: true,
                     fontSize: 14,
                     fontFamily: "SFMono-Regular, Menlo, Monaco, monospace",
                     lineNumbers: "on",
@@ -393,7 +541,9 @@
                     tabSize: 4,
                     insertSpaces: true,
                     padding: { top: 12, bottom: 12 },
-                    dragAndDrop: false
+                    contextmenu: true,
+                    dragAndDrop: false,
+                    mouseWheelZoom: false
                 });
 
                 editor.addCommand(
