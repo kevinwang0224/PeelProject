@@ -9,6 +9,8 @@ import {
   Minimize2,
   MoreHorizontal,
   Palette,
+  PanelBottomClose,
+  PanelBottomOpen,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -19,8 +21,7 @@ import {
   Plus,
   Search,
   Settings,
-  Trash2,
-  X
+  Trash2
 } from 'lucide-react'
 import {
   startTransition,
@@ -107,9 +108,11 @@ export default function App(): React.JSX.Element {
   const [isCapturingShortcut, setIsCapturingShortcut] = useState(false)
   const [renameTarget, setRenameTarget] = useState<HistoryRecord | null>(null)
   const [renameValue, setRenameValue] = useState('')
-  const [resultCollapsed, setResultCollapsed] = useState(true)
   const [resultVisible, setResultVisible] = useState(false)
+  const [resultCollapsed, setResultCollapsed] = useState(true)
+  const [expressionCollapsed, setExpressionCollapsed] = useState(false)
   const [splitRatio, setSplitRatio] = useState(0.55)
+  const [topPanelRatio, setTopPanelRatio] = useState(0.86)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [extractionMode, setExtractionMode] = useState<ExtractionMode>('javascript')
@@ -123,6 +126,7 @@ export default function App(): React.JSX.Element {
   const expressionEditorHandleRef = useRef<MonacoSurfaceHandle | null>(null)
   const resultEditorHandleRef = useRef<MonacoSurfaceHandle | null>(null)
   const activeEditorHandleRef = useRef<MonacoSurfaceHandle | null>(null)
+  const mainContentRef = useRef<HTMLDivElement>(null)
   const splitContainerRef = useRef<HTMLDivElement>(null)
   const [newMenuOpen, setNewMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -273,12 +277,11 @@ export default function App(): React.JSX.Element {
   }, [editorText, persistCurrentEditor, selectedId, snapshot])
 
   const openResult = useCallback(() => {
-    setResultCollapsed(false)
     setResultVisible(true)
+    setResultCollapsed(false)
   }, [])
 
   const closeResult = useCallback(() => {
-    setResultVisible(false)
     setResultCollapsed(true)
   }, [])
 
@@ -292,6 +295,29 @@ export default function App(): React.JSX.Element {
     const onMove = (ev: MouseEvent): void => {
       const ratio = (ev.clientX - containerRect.left) / containerRect.width
       setSplitRatio(Math.max(0.25, Math.min(0.78, ratio)))
+    }
+
+    const onUp = (): void => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [])
+
+  const handleHeightDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    const container = mainContentRef.current
+    if (!container) return
+
+    const containerRect = container.getBoundingClientRect()
+    const fixedRowsHeight = 36 + 5
+    const adjustableHeight = Math.max(1, containerRect.height - fixedRowsHeight)
+
+    const onMove = (ev: MouseEvent): void => {
+      const ratio = (ev.clientY - containerRect.top) / adjustableHeight
+      setTopPanelRatio(Math.max(0.45, Math.min(0.86, ratio)))
     }
 
     const onUp = (): void => {
@@ -346,9 +372,7 @@ export default function App(): React.JSX.Element {
           text: 'Current content is not valid JSON.',
           displayStyle: 'plainText'
         })
-        if (expand) {
-          openResult()
-        }
+        if (expand) openResult()
         return
       }
 
@@ -360,9 +384,7 @@ export default function App(): React.JSX.Element {
         })
 
         setExtractionResult(result)
-        if (expand || result.status !== 'idle') {
-          openResult()
-        }
+        if (expand) openResult()
       } catch (error) {
         setExtractionResult({
           status: 'error',
@@ -370,17 +392,16 @@ export default function App(): React.JSX.Element {
           text: error instanceof Error ? error.message : 'Extraction failed.',
           displayStyle: 'plainText'
         })
+        if (expand) openResult()
       }
     },
     [editorText, extractionMode, extractionQuery, openResult]
   )
 
   useEffect(() => {
-    if (!extractionQuery.trim().length) {
+    if (!resultVisible || !extractionQuery.trim().length) {
       return
     }
-
-    startTransition(openResult)
 
     const timer = window.setTimeout(() => {
       void runExtraction()
@@ -389,7 +410,26 @@ export default function App(): React.JSX.Element {
     return () => {
       window.clearTimeout(timer)
     }
-  }, [editorText, extractionMode, extractionQuery, runExtraction, openResult])
+  }, [editorText, extractionMode, extractionQuery, resultVisible, runExtraction])
+
+  const handleExtractionModeChange = useCallback(
+    (value: ExtractionMode): void => {
+      setExtractionMode(value)
+      openResult()
+    },
+    [openResult]
+  )
+
+  const handleExtractionQueryChange = useCallback(
+    (value: string): void => {
+      setExtractionQuery(value)
+      if (!value.trim().length) {
+        setExtractionResult(idleExtractionResult)
+      }
+      openResult()
+    },
+    [openResult]
+  )
 
   const handleCreateRecord = useCallback(
     async (initialContent: string): Promise<void> => {
@@ -521,9 +561,7 @@ export default function App(): React.JSX.Element {
   )
 
   const handleCopyCurrent = useCallback(async (): Promise<void> => {
-    const result = formatJson(editorText, 'pretty')
-    const textToCopy = result.ok ? result.output : editorText
-    await window.peel.clipboard.writeText(textToCopy)
+    await window.peel.clipboard.writeText(editorText)
     toast.success('Copied.')
   }, [editorText])
 
@@ -805,17 +843,25 @@ export default function App(): React.JSX.Element {
 
           {/* ── Row 2, Col 2: Main Editor Area — 宽度由父级 grid-template-columns 过渡；不要用 Framer layout(transform)，否则 Monaco 选区/光标会错位 */}
           <main
-            className="grid min-h-0 grid-rows-[minmax(0,1fr)_minmax(160px,220px)_36px] gap-px bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]"
-            style={{ gridColumn: sidebarCollapsed ? '1 / -1' : undefined }}
+            ref={mainContentRef}
+            className="grid min-h-0 gap-px bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]"
+            style={{
+              gridColumn: sidebarCollapsed ? '1 / -1' : undefined,
+              gridTemplateRows: expressionCollapsed
+                ? 'minmax(160px, 1fr) 32px 36px'
+                : `minmax(160px, ${topPanelRatio}fr) 5px minmax(120px, ${1 - topPanelRatio}fr) 36px`
+            }}
           >
             {/* Top row: JSON (left) + drag handle + Result (right) */}
             <div
               ref={splitContainerRef}
               className="grid min-h-0"
               style={{
-                gridTemplateColumns: resultCollapsed
+                gridTemplateColumns: !resultVisible
                   ? '1fr'
-                  : `minmax(0, ${splitRatio}fr) 5px minmax(200px, ${1 - splitRatio}fr)`
+                  : resultCollapsed
+                    ? 'minmax(0, 1fr) 32px'
+                    : `minmax(0, ${splitRatio}fr) 5px minmax(200px, ${1 - splitRatio}fr)`
               }}
             >
               {/* JSON Panel */}
@@ -867,18 +913,27 @@ export default function App(): React.JSX.Element {
                 />
               </PanelFrame>
 
-              {/* Drag handle — only between panels when result is open */}
-              {!resultCollapsed && (
+              {/* Drag handle — only between expanded panels */}
+              {resultVisible && !resultCollapsed ? (
                 <div
                   className="cursor-col-resize bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] transition-colors duration-150 select-none hover:bg-[color-mix(in_srgb,var(--foreground)_10%,transparent)]"
                   onMouseDown={handleDragStart}
                 />
-              )}
+              ) : null}
 
               {/* Result Panel：不用 framer 包一层，避免 opacity 动画带来的合成层与 Monaco 错位 */}
-              {resultVisible ? (
+              {!resultVisible ? null : resultCollapsed ? (
+                <PanelRail
+                  title="Result"
+                  side="right"
+                  statusTone={toneForResult(visibleExtractionResult.status)}
+                  icon={<PanelRightOpen className="size-4 shrink-0" />}
+                  onClick={openResult}
+                  ariaLabel="Show Result"
+                />
+              ) : (
                 <section className="grid min-h-0 grid-rows-[36px_minmax(0,1fr)] bg-[var(--panel)]">
-                  <header className="flex items-center justify-between border-b border-[var(--border)] pl-6 pr-4">
+                  <header className="flex items-center justify-between border-b border-[var(--border)] pl-6 pr-3">
                     <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-xs">
                       <span className="shrink-0 font-medium">Result</span>
                       <span
@@ -927,8 +982,15 @@ export default function App(): React.JSX.Element {
                         <Copy className="size-3.5" />
                         Copy
                       </Button>
-                      <Button variant="ghost" size="sm" className="px-2" onClick={closeResult}>
-                        <X className="size-4" />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="px-2"
+                        onClick={closeResult}
+                        title="Hide Result"
+                        aria-label="Hide Result"
+                      >
+                        <PanelRightClose className="size-4" />
                       </Button>
                     </div>
                   </header>
@@ -955,66 +1017,82 @@ export default function App(): React.JSX.Element {
                     )}
                   </div>
                 </section>
-              ) : null}
+              )}
             </div>
 
-            {/* Bottom row: Expression Panel — always visible */}
-            <section className="grid min-h-0 grid-rows-[36px_minmax(0,1fr)] bg-[var(--panel)]">
-              <header className="flex items-center justify-between border-b border-[var(--border)] pl-6 pr-3">
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={extractionMode}
-                    onValueChange={(value: ExtractionMode) => setExtractionMode(value)}
-                  >
-                    <SelectTrigger className="h-7 w-[120px] text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="javascript">JavaScript</SelectItem>
-                      <SelectItem value="jsonpath">JSONPath</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="px-2"
-                    onClick={() => (resultCollapsed ? openResult() : closeResult())}
-                    title={resultCollapsed ? 'Show Result' : 'Hide Result'}
-                  >
-                    {resultCollapsed ? (
-                      <PanelRightOpen className="size-4" />
-                    ) : (
-                      <PanelRightClose className="size-4" />
-                    )}
-                  </Button>
-                </div>
-              </header>
-              <div className="min-h-0 h-full overflow-hidden">
-                <MonacoEditorSurface
-                  path="peel://expression.ts"
-                  theme={monacoTheme}
-                  language={extractionMode === 'javascript' ? 'javascript' : 'plaintext'}
-                  fontSize={settings.editorFontSize}
-                  value={extractionQuery}
-                  onChange={setExtractionQuery}
-                  placeholderOffsetPx={extractionMode === 'jsonpath' ? 8 : 0}
-                  placeholder={
-                    extractionMode === 'javascript'
-                      ? 'data.items.map((item) => item.id)'
-                      : '$.items[*].id'
-                  }
-                  onRun={() => {
-                    void runExtraction(true)
-                  }}
-                  onFocus={(handle) => {
-                    activeEditorHandleRef.current = handle
-                  }}
-                  handleRef={expressionEditorHandleRef}
+            {expressionCollapsed ? (
+              <section className="min-h-0 border-t border-[var(--border)] bg-[var(--panel)]">
+                <button
+                  className="flex size-full items-center justify-center gap-2 px-3 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--foreground)_5%,transparent)] hover:text-[var(--foreground)]"
+                  onClick={() => setExpressionCollapsed(false)}
+                  title="Show Expression"
+                  aria-label="Show Expression"
+                >
+                  <PanelBottomOpen className="size-4" />
+                  <span>Expression</span>
+                  <span className="text-[var(--muted-foreground)]">
+                    {extractionMode === 'javascript' ? 'JavaScript' : 'JSONPath'}
+                  </span>
+                </button>
+              </section>
+            ) : (
+              <>
+                <div
+                  className="cursor-row-resize bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] transition-colors duration-150 select-none hover:bg-[color-mix(in_srgb,var(--foreground)_10%,transparent)]"
+                  onMouseDown={handleHeightDragStart}
                 />
-              </div>
-            </section>
+
+                {/* Bottom row: Expression Panel */}
+                <section className="grid min-h-0 grid-rows-[36px_minmax(0,1fr)] bg-[var(--panel)]">
+                  <header className="flex items-center justify-between border-b border-[var(--border)] pl-6 pr-3">
+                    <div className="flex items-center gap-2">
+                      <Select value={extractionMode} onValueChange={handleExtractionModeChange}>
+                        <SelectTrigger className="h-7 w-[120px] text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="javascript">JavaScript</SelectItem>
+                          <SelectItem value="jsonpath">JSONPath</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="px-2"
+                      onClick={() => setExpressionCollapsed(true)}
+                      title="Hide Expression"
+                      aria-label="Hide Expression"
+                    >
+                      <PanelBottomClose className="size-4" />
+                    </Button>
+                  </header>
+                  <div className="min-h-0 h-full overflow-hidden">
+                    <MonacoEditorSurface
+                      path="peel://expression.ts"
+                      theme={monacoTheme}
+                      language={extractionMode === 'javascript' ? 'javascript' : 'plaintext'}
+                      fontSize={settings.editorFontSize}
+                      value={extractionQuery}
+                      onChange={handleExtractionQueryChange}
+                      placeholderOffsetPx={extractionMode === 'jsonpath' ? 8 : 0}
+                      placeholder={
+                        extractionMode === 'javascript'
+                          ? 'data.items.map((item) => item.id)'
+                          : '$.items[*].id'
+                      }
+                      onRun={() => {
+                        void runExtraction(true)
+                      }}
+                      onFocus={(handle) => {
+                        activeEditorHandleRef.current = handle
+                      }}
+                      handleRef={expressionEditorHandleRef}
+                    />
+                  </div>
+                </section>
+              </>
+            )}
 
             {/* Status Bar — below expression panel */}
             <footer className="flex items-center justify-between border-t border-[var(--border)] bg-[var(--panel)] px-4 text-xs text-[var(--muted)]">
@@ -1280,7 +1358,7 @@ export default function App(): React.JSX.Element {
           </DialogContent>
         </Dialog>
       </div>
-      <Toaster theme={resolvedTheme} position="top-right" closeButton richColors />
+      <Toaster theme={resolvedTheme} position="top-center" closeButton richColors />
     </TooltipProvider>
   )
 }
@@ -1420,6 +1498,44 @@ function HistorySection({
           </div>
         ))}
       </div>
+    </section>
+  )
+}
+
+function PanelRail({
+  title,
+  side,
+  statusTone,
+  icon,
+  onClick,
+  ariaLabel
+}: {
+  title: string
+  side: 'left' | 'right'
+  statusTone: 'success' | 'danger' | 'muted'
+  icon: React.ReactNode
+  onClick: () => void
+  ariaLabel: string
+}): React.JSX.Element {
+  return (
+    <section
+      className={cn(
+        'min-h-0 bg-[var(--panel)]',
+        side === 'left' ? 'border-r border-[var(--border)]' : 'border-l border-[var(--border)]'
+      )}
+    >
+      <button
+        className="flex size-full flex-col items-center gap-2 px-1.5 py-3 text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--foreground)_5%,transparent)] hover:text-[var(--foreground)]"
+        onClick={onClick}
+        title={ariaLabel}
+        aria-label={ariaLabel}
+      >
+        {icon}
+        <span className="[writing-mode:vertical-rl] text-[11px] font-medium tracking-wide">
+          {title}
+        </span>
+        <span className="peel-status-dot mt-auto shrink-0" data-tone={statusTone} />
+      </button>
     </section>
   )
 }
