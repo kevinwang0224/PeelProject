@@ -10,6 +10,9 @@ files:
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
   - '!vitest.config.ts'
+  - '!node_modules/@peel/shared/src/**'
+  - '!node_modules/@peel/shared/tsconfig*.json'
+  - '!node_modules/@peel/shared/vitest.config.ts'
 asarUnpack:
   - resources/**
 win:

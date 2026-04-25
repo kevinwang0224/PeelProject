@@ -2,33 +2,42 @@
   "name": "@peel/shared",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
+  "type": "commonjs",
   "description": "Platform-neutral Peel JSON helpers and shared types.",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./json": {
-      "types": "./src/json.ts",
-      "default": "./src/json.ts"
+      "types": "./dist/json.d.ts",
+      "require": "./dist/json.js",
+      "default": "./dist/json.js"
     },
     "./history": {
-      "types": "./src/history.ts",
-      "default": "./src/history.ts"
+      "types": "./dist/history.d.ts",
+      "require": "./dist/history.js",
+      "default": "./dist/history.js"
     },
     "./extraction": {
-      "types": "./src/extraction.ts",
-      "default": "./src/extraction.ts"
+      "types": "./dist/extraction.d.ts",
+      "require": "./dist/extraction.js",
+      "default": "./dist/extraction.js"
     },
     "./types": {
-      "types": "./src/types.ts",
-      "default": "./src/types.ts"
+      "types": "./dist/types.d.ts",
+      "require": "./dist/types.js",
+      "default": "./dist/types.js"
     }
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
