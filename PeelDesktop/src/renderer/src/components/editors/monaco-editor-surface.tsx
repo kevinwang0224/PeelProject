@@ -1,12 +1,28 @@
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type * as Monaco from 'monaco-editor'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 
 import type { JsonValidationIssue } from '@shared/peel'
 import { cn } from '@/lib/utils'
 
+/*
+ * @monaco-editor/react 默认在外层用 flex；在嵌套 grid 里有时会让内部测量与真实盒尺寸差一帧。
+ * 用 block + overflow:hidden 占满父级，减少 flex 子项与 Monaco layout 的耦合。
+ */
+const MONACO_REACT_WRAPPER_STYLE: CSSProperties = {
+  display: 'block',
+  position: 'relative',
+  textAlign: 'initial',
+  width: '100%',
+  height: '100%',
+  minWidth: 0,
+  minHeight: 0,
+  overflow: 'hidden'
+}
+
 export interface MonacoSurfaceHandle {
   focus: () => void
+  cutSelection: () => string
   getTextForCopy: () => string
   pasteText: (text: string) => void
   selectAll: () => void
@@ -20,6 +36,7 @@ interface MonacoEditorSurfaceProps {
   path: string
   theme: 'peel-light' | 'peel-dark'
   placeholder?: string
+  placeholderOffsetPx?: number
   readOnly?: boolean
   fontSize: number
   validationIssue?: JsonValidationIssue | null
@@ -38,6 +55,7 @@ export function MonacoEditorSurface({
   path,
   theme,
   placeholder,
+  placeholderOffsetPx = 0,
   readOnly = false,
   fontSize,
   validationIssue,
@@ -51,10 +69,32 @@ export function MonacoEditorSurface({
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof Monaco | null>(null)
   const lastRevealTokenRef = useRef<number>(0)
+  const [placeholderOffsetLeft, setPlaceholderOffsetLeft] = useState(18)
 
   const stableHandleRef = useRef<MonacoSurfaceHandle>({
     focus: () => {
       editorRef.current?.focus()
+    },
+    cutSelection: () => {
+      const editor = editorRef.current
+      const model = editor?.getModel()
+      if (!editor || !model || readOnly) {
+        return ''
+      }
+
+      const selection = editor.getSelection()
+      if (!selection || selection.isEmpty()) {
+        return ''
+      }
+
+      const selectedText = model.getValueInRange(selection)
+      if (!selectedText.length) {
+        return ''
+      }
+
+      editor.executeEdits('peel-manual-cut', [{ range: selection, text: '', forceMoveMarkers: true }])
+      editor.focus()
+      return selectedText
     },
     getTextForCopy: () => {
       const editor = editorRef.current
@@ -153,6 +193,7 @@ export function MonacoEditorSurface({
   const handleMount: OnMount = (editor, monaco) => {
     editorRef.current = editor
     monacoRef.current = monaco
+    setPlaceholderOffsetLeft(editor.getLayoutInfo().contentLeft)
 
     if (onRun) {
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
@@ -191,18 +232,38 @@ export function MonacoEditorSurface({
     editor.onDidDispose(() => {
       domNode?.removeEventListener('paste', handlePaste, true)
     })
+
+    editor.onDidLayoutChange(() => {
+      setPlaceholderOffsetLeft(editor.getLayoutInfo().contentLeft)
+    })
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        editor.layout()
+      })
+    })
   }
 
   return (
-    <div className="peel-monaco-shell size-full">
+    <div className="peel-monaco-shell size-full min-h-0 min-w-0">
       {!value.length && placeholder ? (
-        <div className="peel-monaco-placeholder">{placeholder}</div>
+        <div
+          className="peel-monaco-placeholder"
+          style={{
+            left: placeholderOffsetLeft + placeholderOffsetPx,
+            fontSize,
+            fontFamily: '"SF Mono", Menlo, Monaco, monospace'
+          }}
+        >
+          {placeholder}
+        </div>
       ) : null}
       <Editor
         path={path}
         value={value}
         language={language}
         theme={theme}
+        wrapperProps={{ style: MONACO_REACT_WRAPPER_STYLE }}
         onChange={(nextValue) => onChange?.(nextValue ?? '')}
         onMount={handleMount}
         options={{
@@ -210,24 +271,31 @@ export function MonacoEditorSurface({
           automaticLayout: true,
           minimap: { enabled: false },
           scrollBeyondLastLine: false,
-          lineNumbers: readOnly && language === 'plaintext' ? 'off' : 'on',
+          lineNumbers: placeholder ? 'off' : readOnly && language === 'plaintext' ? 'off' : 'on',
+          lineNumbersMinChars: 0,
+          lineDecorationsWidth: 0,
           renderLineHighlight: 'none',
-          wordWrap: 'on',
+          /* 折行时选区矩形更易与字形在 WebKit 下出现亚像素偏差；JSON 以不换行为默认更稳 */
+          wordWrap: language === 'json' ? 'off' : 'on',
           glyphMargin: false,
           folding: language !== 'plaintext',
-          contextmenu: true,
+          contextmenu: false,
           mouseWheelZoom: false,
+          renderWhitespace: 'selection',
           fontSize,
-          fontFamily: 'IBM Plex Mono',
+          // fontFamily: '"SF Mono", Menlo, Monaco, monospace',
+          fontFamily: 'Menlo, monospace',
+          fontLigatures: false,
+          letterSpacing: 0,
           padding: { top: 16, bottom: 16 },
-          smoothScrolling: true,
+          smoothScrolling: false,
           overviewRulerBorder: false,
           scrollbar: {
             verticalScrollbarSize: 10,
             horizontalScrollbarSize: 10
           }
         }}
-        className={cn('size-full')}
+        className={cn('size-full min-h-0 min-w-0')}
       />
     </div>
   )

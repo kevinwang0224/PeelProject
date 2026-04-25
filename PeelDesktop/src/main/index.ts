@@ -1,4 +1,13 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  Menu,
+  shell
+} from 'electron'
 import { readFile, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 
@@ -9,7 +18,15 @@ import type { AppSettings, ExportJsonPayload, HistoryRecord, HistoryRecordSeed }
 import { buildAppMenu } from './menu'
 import { PeelStorage } from './storage'
 
+/** 若选区/光标与文字错位，可设 `PEEL_DISABLE_GPU=1` 启动以排查是否为 GPU 合成问题（须在 ready 之前调用） */
+if (process.env.PEEL_DISABLE_GPU === '1') {
+  app.disableHardwareAcceleration()
+}
+
 const storage = new PeelStorage(join(app.getPath('userData'), 'peel-data.json'))
+let registeredQuickPasteShortcut = ''
+/** 应用菜单的 IPC 目标：hiddenInset 等场景下 getFocusedWindow() 可能为 null，需回退到主窗 */
+let peelMainBrowserWindow: BrowserWindow | null = null
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -38,11 +55,26 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
+  // Keep Chromium zoom fixed at 100% to avoid Monaco caret/selection layer drift.
+  mainWindow.webContents.setZoomFactor(1)
+  if (typeof mainWindow.webContents.setVisualZoomLevelLimits === 'function') {
+    void mainWindow.webContents.setVisualZoomLevelLimits(1, 1).catch((error) => {
+      console.warn('Failed to lock visual zoom limits:', error)
+    })
+  }
+
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
     void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
     void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  peelMainBrowserWindow = mainWindow
+  mainWindow.on('closed', () => {
+    if (peelMainBrowserWindow === mainWindow) {
+      peelMainBrowserWindow = null
+    }
+  })
 
   return mainWindow
 }
@@ -60,9 +92,24 @@ function registerIpcHandlers(): void {
     storage.renameRecord(id, title)
   )
   ipcMain.handle(IPC_CHANNELS.historyTogglePin, (_event, id: string) => storage.togglePin(id))
-  ipcMain.handle(IPC_CHANNELS.settingsSave, (_event, settings: AppSettings) =>
-    storage.saveSettings(settings)
-  )
+  ipcMain.handle(IPC_CHANNELS.settingsSave, async (_event, settings: AppSettings) => {
+    const current = await storage.bootstrap()
+    const nextShortcut = settings.quickPasteShortcut.trim()
+    const currentShortcut = current.settings.quickPasteShortcut.trim()
+
+    if (nextShortcut !== currentShortcut) {
+      const registered = registerQuickPasteShortcut(nextShortcut)
+      if (!registered && nextShortcut.length) {
+        throw new Error('Global shortcut is unavailable or already in use.')
+      }
+    }
+
+    const snapshot = await storage.saveSettings({
+      ...settings,
+      quickPasteShortcut: nextShortcut
+    })
+    return snapshot
+  })
   ipcMain.handle(IPC_CHANNELS.filesOpenJson, openJsonFile)
   ipcMain.handle(IPC_CHANNELS.filesExportJson, (_event, payload: ExportJsonPayload) =>
     exportJsonFile(payload)
@@ -82,10 +129,14 @@ app.whenReady().then(() => {
 
   registerIpcHandlers()
 
-  const getFocusedWindow = (): BrowserWindow | null => BrowserWindow.getFocusedWindow()
-  Menu.setApplicationMenu(buildAppMenu(getFocusedWindow, is.dev))
+  const getMenuTargetWindow = (): BrowserWindow | null =>
+    BrowserWindow.getFocusedWindow() ?? peelMainBrowserWindow ?? BrowserWindow.getAllWindows()[0] ?? null
 
   createWindow()
+  Menu.setApplicationMenu(buildAppMenu(getMenuTargetWindow, is.dev))
+  void storage.bootstrap().then((snapshot) => {
+    registerQuickPasteShortcut(snapshot.settings.quickPasteShortcut)
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -99,6 +150,104 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
+})
+
+function registerQuickPasteShortcut(accelerator: string): boolean {
+  const normalized = accelerator.trim()
+  const previousShortcut = registeredQuickPasteShortcut
+
+  if (previousShortcut) {
+    globalShortcut.unregister(previousShortcut)
+    registeredQuickPasteShortcut = ''
+  }
+
+  if (!normalized.length) {
+    return true
+  }
+
+  try {
+    const registered = globalShortcut.register(normalized, () => {
+      const mainWindow = ensureMainWindow()
+
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore()
+      }
+
+      mainWindow.show()
+      mainWindow.focus()
+      sendMenuAction(mainWindow, 'new-json-from-clipboard')
+    })
+
+    if (registered) {
+      registeredQuickPasteShortcut = normalized
+      return true
+    }
+
+    if (previousShortcut) {
+      const rollbackRegistered = globalShortcut.register(previousShortcut, () => {
+        const mainWindow = ensureMainWindow()
+
+        if (mainWindow.isMinimized()) {
+          mainWindow.restore()
+        }
+
+        mainWindow.show()
+        mainWindow.focus()
+        sendMenuAction(mainWindow, 'new-json-from-clipboard')
+      })
+
+      if (rollbackRegistered) {
+        registeredQuickPasteShortcut = previousShortcut
+      }
+    }
+  } catch (error) {
+    console.error('Failed to register quick paste shortcut:', error)
+
+    if (previousShortcut) {
+      const rollbackRegistered = globalShortcut.register(previousShortcut, () => {
+        const mainWindow = ensureMainWindow()
+
+        if (mainWindow.isMinimized()) {
+          mainWindow.restore()
+        }
+
+        mainWindow.show()
+        mainWindow.focus()
+        sendMenuAction(mainWindow, 'new-json-from-clipboard')
+      })
+
+      if (rollbackRegistered) {
+        registeredQuickPasteShortcut = previousShortcut
+      }
+    }
+  }
+
+  return false
+}
+
+function ensureMainWindow(): BrowserWindow {
+  const existingWindow = BrowserWindow.getAllWindows()[0]
+
+  if (existingWindow) {
+    return existingWindow
+  }
+
+  return createWindow()
+}
+
+function sendMenuAction(window: BrowserWindow, action: 'new-json-from-clipboard'): void {
+  if (window.webContents.isLoadingMainFrame()) {
+    window.webContents.once('did-finish-load', () => {
+      window.webContents.send(IPC_CHANNELS.menuAction, action)
+    })
+    return
+  }
+
+  window.webContents.send(IPC_CHANNELS.menuAction, action)
+}
 
 async function openJsonFile(): Promise<{ path: string; title: string; content: string } | null> {
   const browserWindow = BrowserWindow.getFocusedWindow()

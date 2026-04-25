@@ -4,8 +4,11 @@ import {
   ChevronDown,
   Copy,
   FolderOpen,
+  Info,
+  Keyboard,
   Minimize2,
   MoreHorizontal,
+  Palette,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -76,6 +79,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { runExtractionInWorker } from '@/lib/extraction-client'
 import { formatRelativeTime } from '@/lib/relative-time'
@@ -96,6 +100,11 @@ export default function App(): React.JSX.Element {
   const [editorText, setEditorText] = useState('')
   const [searchText, setSearchText] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsSection, setSettingsSection] = useState<'appearance' | 'shortcuts' | 'about'>(
+    'appearance'
+  )
+  const [quickPasteShortcutDraft, setQuickPasteShortcutDraft] = useState('')
+  const [isCapturingShortcut, setIsCapturingShortcut] = useState(false)
   const [renameTarget, setRenameTarget] = useState<HistoryRecord | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [resultCollapsed, setResultCollapsed] = useState(true)
@@ -118,10 +127,18 @@ export default function App(): React.JSX.Element {
   const [newMenuOpen, setNewMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const newMenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const focusRawEditorSoon = useCallback(() => {
+    window.setTimeout(() => {
+      rawEditorHandleRef.current?.focus()
+      activeEditorHandleRef.current = rawEditorHandleRef.current
+    }, 0)
+  }, [])
 
   const records = snapshot?.history ?? EMPTY_HISTORY
   const settings = snapshot?.settings ?? DEFAULT_SETTINGS
   const selectedRecord = records.find((record) => record.id === selectedId) ?? null
+  const titleForWidth = isEditingTitle ? titleDraft : (selectedRecord?.title ?? 'Untitled')
+  const titleWidthCh = Math.min(Math.max(titleForWidth.length, 12), 28)
   const summary = summarizeJson(editorText)
   const resolvedTheme = settings.theme === 'system' ? systemTheme : settings.theme
   const monacoTheme = resolvedTheme === 'dark' ? 'peel-dark' : 'peel-light'
@@ -195,14 +212,8 @@ export default function App(): React.JSX.Element {
       return null
     }
 
-    if (!editorText.trim().length) {
-      if (!selectedId) {
-        return snapshot
-      }
-
-      const nextSnapshot = await window.peel.history.remove(selectedId)
-      applySnapshot(nextSnapshot)
-      return nextSnapshot
+    if (!selectedId && !editorText.trim().length) {
+      return snapshot
     }
 
     if (!selectedId) {
@@ -268,39 +279,56 @@ export default function App(): React.JSX.Element {
 
   const closeResult = useCallback(() => {
     setResultVisible(false)
-    // resultCollapsed is set true only after the exit animation completes (onExitComplete)
+    setResultCollapsed(true)
   }, [])
 
-  const handleDragStart = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault()
-      const container = splitContainerRef.current
-      if (!container) return
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    const container = splitContainerRef.current
+    if (!container) return
 
-      const containerRect = container.getBoundingClientRect()
+    const containerRect = container.getBoundingClientRect()
 
-      const onMove = (ev: MouseEvent): void => {
-        const ratio = (ev.clientX - containerRect.left) / containerRect.width
-        setSplitRatio(Math.max(0.25, Math.min(0.78, ratio)))
-      }
+    const onMove = (ev: MouseEvent): void => {
+      const ratio = (ev.clientX - containerRect.left) / containerRect.width
+      setSplitRatio(Math.max(0.25, Math.min(0.78, ratio)))
+    }
 
-      const onUp = (): void => {
-        document.removeEventListener('mousemove', onMove)
-        document.removeEventListener('mouseup', onUp)
-      }
+    const onUp = (): void => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
 
-      document.addEventListener('mousemove', onMove)
-      document.addEventListener('mouseup', onUp)
-    },
-    []
-  )
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [])
 
   const handleTitleCommit = useCallback(async (): Promise<void> => {
-    setIsEditingTitle(false)
-    if (!selectedId || !titleDraft.trim()) return
-    const nextSnapshot = await window.peel.history.rename(selectedId, titleDraft.trim())
-    applySnapshot(nextSnapshot)
-  }, [applySnapshot, selectedId, titleDraft])
+    if (!selectedId) {
+      setIsEditingTitle(false)
+      return
+    }
+
+    const trimmed = titleDraft.trim()
+    if (!trimmed) {
+      setIsEditingTitle(false)
+      return
+    }
+
+    const currentTitle = records.find((record) => record.id === selectedId)?.title
+    if (currentTitle === trimmed) {
+      setIsEditingTitle(false)
+      return
+    }
+
+    try {
+      const nextSnapshot = await window.peel.history.rename(selectedId, trimmed)
+      // 不用 startTransition：否则 snapshot 晚一帧才更新，会先退出编辑态并闪一下旧标题
+      setSnapshot(nextSnapshot)
+    } finally {
+      setIsEditingTitle(false)
+    }
+  }, [records, selectedId, titleDraft])
 
   const runExtraction = useCallback(
     async (expand = false): Promise<void> => {
@@ -365,10 +393,6 @@ export default function App(): React.JSX.Element {
 
   const handleCreateRecord = useCallback(
     async (initialContent: string): Promise<void> => {
-      if (!snapshot) {
-        return
-      }
-
       await persistCurrentEditor()
       const created = await window.peel.history.create({
         title: createDefaultTitle(),
@@ -382,9 +406,9 @@ export default function App(): React.JSX.Element {
         setExtractionResult(idleExtractionResult)
       })
 
-      rawEditorHandleRef.current?.focus()
+      focusRawEditorSoon()
     },
-    [applySnapshot, persistCurrentEditor, snapshot]
+    [applySnapshot, focusRawEditorSoon, persistCurrentEditor]
   )
 
   const handleOpenJson = useCallback(async (): Promise<void> => {
@@ -522,24 +546,6 @@ export default function App(): React.JSX.Element {
     [extractionResult]
   )
 
-  const handleCopyActive = useCallback(async (): Promise<void> => {
-    if (activeEditorHandleRef.current) {
-      const text = activeEditorHandleRef.current.getTextForCopy()
-      if (text.length) {
-        await window.peel.clipboard.writeText(text)
-        toast.success('Copied.')
-      }
-      return
-    }
-
-    if (visibleExtractionResult.status === 'success') {
-      await handleCopyExtraction()
-      return
-    }
-
-    await handleCopyCurrent()
-  }, [handleCopyCurrent, handleCopyExtraction, visibleExtractionResult.status])
-
   const persistSettings = useCallback(
     async (nextSettings: AppSnapshot['settings']): Promise<void> => {
       const nextSnapshot = await window.peel.settings.save(nextSettings)
@@ -554,6 +560,11 @@ export default function App(): React.JSX.Element {
         case 'new-json':
           await handleCreateRecord('{}')
           break
+        case 'new-json-from-clipboard': {
+          const clipboardText = await window.peel.clipboard.readText()
+          await handleCreateRecord(formatPastedJson(clipboardText))
+          break
+        }
         case 'open-json':
           await handleOpenJson()
           break
@@ -566,23 +577,12 @@ export default function App(): React.JSX.Element {
         case 'compact-json':
           handleFormat('compact')
           break
-        case 'copy':
-          await handleCopyActive()
-          break
-        case 'paste': {
-          const clipboardText = await window.peel.clipboard.readText()
-          activeEditorHandleRef.current?.pasteText(clipboardText)
-          break
-        }
         case 'find':
           activeEditorHandleRef.current?.showFind()
           break
-        case 'select-all':
-          activeEditorHandleRef.current?.selectAll()
-          break
       }
     },
-    [handleCopyActive, handleCreateRecord, handleExportJson, handleFormat, handleOpenJson]
+    [handleCreateRecord, handleExportJson, handleFormat, handleOpenJson]
   )
 
   useEffect(() => {
@@ -609,7 +609,7 @@ export default function App(): React.JSX.Element {
         >
           {/* ── Row 1, Col 1: Sidebar header (sibling of main header → same row height) ── */}
           <div
-            className="peel-window-drag flex items-center gap-0.5 border-b border-r border-[var(--border)] bg-[color-mix(in_srgb,var(--background)_92%,var(--panel))]"
+            className="peel-window-drag flex items-center gap-0.5 border-b border-r border-[var(--border)] bg-[var(--panel)]"
             style={{
               paddingLeft: sidebarCollapsed ? 88 : undefined,
               paddingRight: sidebarCollapsed ? 8 : 8,
@@ -681,47 +681,59 @@ export default function App(): React.JSX.Element {
 
           {/* ── Row 1, Col 2: Main header / title toolbar ── */}
           <header className="peel-window-drag flex h-9 shrink-0 items-center border-b border-[var(--border)] bg-[var(--panel)] px-4">
-            {isEditingTitle ? (
-              <input
-                autoFocus
-                type="text"
-                value={titleDraft}
-                onChange={(e) => setTitleDraft(e.target.value)}
-                onBlur={() => void handleTitleCommit()}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void handleTitleCommit()
-                  if (e.key === 'Escape') setIsEditingTitle(false)
-                }}
-                className="peel-doc-title-text peel-doc-title-field min-w-0 flex-1"
-              />
-            ) : (
-              <div
-                role="button"
-                tabIndex={0}
-                className="peel-doc-title-text min-w-0 flex-1 cursor-text truncate text-left transition-opacity hover:opacity-70"
-                onClick={() => {
-                  if (!selectedRecord) return
-                  setTitleDraft(selectedRecord.title)
-                  setIsEditingTitle(true)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    if (!selectedRecord) return
-                    setTitleDraft(selectedRecord.title)
-                    setIsEditingTitle(true)
-                  }
-                }}
-                title="Click to rename"
-              >
-                {selectedRecord?.title ?? 'Untitled'}
-              </div>
-            )}
+            <div
+              className="peel-doc-title-shell cursor-text"
+              style={{ width: `${titleWidthCh}ch`, maxWidth: '280px' }}
+              role={isEditingTitle ? undefined : 'button'}
+              tabIndex={isEditingTitle ? -1 : 0}
+              title={isEditingTitle ? undefined : 'Click to rename'}
+              onClick={
+                isEditingTitle
+                  ? undefined
+                  : () => {
+                      if (!selectedRecord) return
+                      setTitleDraft(selectedRecord.title)
+                      setIsEditingTitle(true)
+                    }
+              }
+              onKeyDown={
+                isEditingTitle
+                  ? undefined
+                  : (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        if (!selectedRecord) return
+                        setTitleDraft(selectedRecord.title)
+                        setIsEditingTitle(true)
+                      }
+                    }
+              }
+            >
+              {isEditingTitle ? (
+                <input
+                  autoFocus
+                  type="text"
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  onBlur={() => void handleTitleCommit()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void handleTitleCommit()
+                    if (e.key === 'Escape') setIsEditingTitle(false)
+                  }}
+                  className="peel-doc-title-text peel-doc-title-field min-w-0 flex-1 text-left"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <span className="peel-doc-title-text block min-w-0 truncate text-left">
+                  {selectedRecord?.title ?? 'Untitled'}
+                </span>
+              )}
+            </div>
           </header>
 
           {/* ── Row 2, Col 1: Sidebar content ── */}
           <aside
-            className="flex min-h-0 flex-col overflow-hidden border-r border-[var(--border)] bg-[color-mix(in_srgb,var(--background)_92%,var(--panel))]"
+            className="flex min-h-0 flex-col overflow-hidden border-r border-[var(--border)] bg-[var(--panel)]"
             style={{ display: sidebarCollapsed ? 'none' : undefined }}
           >
             {!sidebarCollapsed && (
@@ -778,27 +790,24 @@ export default function App(): React.JSX.Element {
                   </div>
                 </ScrollArea>
 
-                <div className="border-t border-[var(--border)] px-3 py-2">
+                <div className="flex h-9 items-center border-t border-[var(--border)] bg-[var(--panel)] px-2.5">
                   <button
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[var(--muted)] transition hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)] hover:text-[var(--foreground)]"
+                    className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-sm text-[var(--muted)] transition hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)] hover:text-[var(--foreground)]"
                     onClick={() => setSettingsOpen(true)}
                   >
                     <Settings className="size-3.5" />
-                    Preferences
+                    Settings
                   </button>
                 </div>
               </>
             )}
           </aside>
 
-          {/* ── Row 2, Col 2: Main Editor Area — layout animates when sidebar collapses/expands ── */}
-          <motion.main
-            layout
-            transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
-            className="grid min-h-0 grid-rows-[minmax(0,1fr)_minmax(160px,220px)_36px] gap-px bg-[var(--border)]"
+          {/* ── Row 2, Col 2: Main Editor Area — 宽度由父级 grid-template-columns 过渡；不要用 Framer layout(transform)，否则 Monaco 选区/光标会错位 */}
+          <main
+            className="grid min-h-0 grid-rows-[minmax(0,1fr)_minmax(160px,220px)_36px] gap-px bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]"
             style={{ gridColumn: sidebarCollapsed ? '1 / -1' : undefined }}
           >
-
             {/* Top row: JSON (left) + drag handle + Result (right) */}
             <div
               ref={splitContainerRef}
@@ -812,17 +821,25 @@ export default function App(): React.JSX.Element {
               {/* JSON Panel */}
               <PanelFrame
                 title="JSON"
-                status={
-                  summary.issue ? `Line ${summary.issue.line}: ${summary.issue.message}` : 'Valid'
-                }
+                status={summary.issue ? `Line ${summary.issue.line}: ${summary.issue.message}` : ''}
                 statusTone={summary.issue ? 'danger' : summary.isValid ? 'success' : 'muted'}
                 actions={
                   <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => handleFormat('pretty')}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Format (Shift+Alt+F)"
+                      onClick={() => handleFormat('pretty')}
+                    >
                       <Braces className="size-3.5" />
                       Format
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleFormat('compact')}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Compact (Shift+Alt+M)"
+                      onClick={() => handleFormat('compact')}
+                    >
                       <Minimize2 className="size-3.5" />
                       Compact
                     </Button>
@@ -842,20 +859,6 @@ export default function App(): React.JSX.Element {
                   onChange={setEditorText}
                   validationIssue={summary.issue}
                   revealIssueToken={errorRevealToken}
-                  onBlur={() => {
-                    if (!selectedId || editorText.trim().length) {
-                      return
-                    }
-
-                    void window.peel.history.remove(selectedId).then((nextSnapshot) => {
-                      applySnapshot(nextSnapshot)
-                      const fallback = nextSnapshot.history[0] ?? null
-                      startTransition(() => {
-                        setSelectedId(fallback?.id ?? null)
-                        setEditorText(fallback?.content ?? '')
-                      })
-                    })
-                  }}
                   onFocus={(handle) => {
                     activeEditorHandleRef.current = handle
                   }}
@@ -867,25 +870,15 @@ export default function App(): React.JSX.Element {
               {/* Drag handle — only between panels when result is open */}
               {!resultCollapsed && (
                 <div
-                  className="cursor-col-resize bg-[var(--border)] hover:bg-[var(--accent,#007aff)] transition-colors duration-150 select-none"
+                  className="cursor-col-resize bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] transition-colors duration-150 select-none hover:bg-[color-mix(in_srgb,var(--foreground)_10%,transparent)]"
                   onMouseDown={handleDragStart}
                 />
               )}
 
-              {/* Result Panel — right column, animates in/out without collapsing grid prematurely */}
-              <AnimatePresence
-                initial={false}
-                onExitComplete={() => setResultCollapsed(true)}
-              >
-                {resultVisible ? (
-                  <motion.section
-                    className="grid min-h-0 grid-rows-[36px_minmax(0,1fr)] bg-[var(--panel)]"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15 }}
-                  >
-                    <header className="flex items-center justify-between border-b border-[var(--border)] px-4">
+              {/* Result Panel：不用 framer 包一层，避免 opacity 动画带来的合成层与 Monaco 错位 */}
+              {resultVisible ? (
+                <section className="grid min-h-0 grid-rows-[36px_minmax(0,1fr)] bg-[var(--panel)]">
+                    <header className="flex items-center justify-between border-b border-[var(--border)] pl-6 pr-4">
                       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-xs">
                         <span className="shrink-0 font-medium">Result</span>
                         <span
@@ -934,12 +927,7 @@ export default function App(): React.JSX.Element {
                           <Copy className="size-3.5" />
                           Copy
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="px-2"
-                          onClick={closeResult}
-                        >
+                        <Button variant="ghost" size="sm" className="px-2" onClick={closeResult}>
                           <X className="size-4" />
                         </Button>
                       </div>
@@ -966,14 +954,13 @@ export default function App(): React.JSX.Element {
                         </ScrollArea>
                       )}
                     </div>
-                  </motion.section>
-                ) : null}
-              </AnimatePresence>
+                </section>
+              ) : null}
             </div>
 
             {/* Bottom row: Expression Panel — always visible */}
             <section className="grid min-h-0 grid-rows-[36px_minmax(0,1fr)] bg-[var(--panel)]">
-              <header className="flex items-center justify-between border-b border-[var(--border)] px-3">
+              <header className="flex items-center justify-between border-b border-[var(--border)] pl-6 pr-3">
                 <div className="flex items-center gap-2">
                   <Select
                     value={extractionMode}
@@ -987,10 +974,6 @@ export default function App(): React.JSX.Element {
                       <SelectItem value="jsonpath">JSONPath</SelectItem>
                     </SelectContent>
                   </Select>
-                  <span className="peel-status-dot" data-tone={summary.issue ? 'danger' : 'muted'} />
-                  <span className="truncate text-xs text-[var(--muted)]">
-                    {summary.issue ? 'Fix JSON first' : 'Cmd+Return to run'}
-                  </span>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <Button
@@ -1016,6 +999,7 @@ export default function App(): React.JSX.Element {
                   fontSize={settings.editorFontSize}
                   value={extractionQuery}
                   onChange={setExtractionQuery}
+                  placeholderOffsetPx={extractionMode === 'jsonpath' ? 8 : 0}
                   placeholder={
                     extractionMode === 'javascript'
                       ? 'data.items.map((item) => item.id)'
@@ -1049,61 +1033,222 @@ export default function App(): React.JSX.Element {
                 <span>{settings.editorFontSize}px</span>
               </div>
             </footer>
-          </motion.main>
+          </main>
         </div>
 
         {/* Settings Dialog */}
-        <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-          <DialogContent>
+        <Dialog
+          open={settingsOpen}
+          onOpenChange={(open) => {
+            setSettingsOpen(open)
+            if (open) {
+              setSettingsSection('appearance')
+              setQuickPasteShortcutDraft(toDisplayShortcut(settings.quickPasteShortcut))
+            }
+          }}
+        >
+          <DialogContent className="w-[min(96vw,780px)]">
             <DialogHeader>
-              <DialogTitle>Preferences</DialogTitle>
-              <DialogDescription>Theme and editor settings.</DialogDescription>
+              <DialogTitle>Settings</DialogTitle>
+              <DialogDescription>
+                Tune app look, keyboard shortcuts, and app info.
+              </DialogDescription>
             </DialogHeader>
 
-            <div className="mt-4 grid gap-4">
-              <PreferenceRow label="Theme">
-                <Select
-                  value={settings.theme}
-                  onValueChange={(value: AppSnapshot['settings']['theme']) => {
-                    void persistSettings({
-                      ...settings,
-                      theme: value
-                    })
-                  }}
-                >
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="system">System</SelectItem>
-                    <SelectItem value="light">Light</SelectItem>
-                    <SelectItem value="dark">Dark</SelectItem>
-                  </SelectContent>
-                </Select>
-              </PreferenceRow>
+            <div className="mt-4 grid min-h-[340px] grid-cols-[168px_minmax(0,1fr)] gap-4">
+              <nav className="flex flex-col gap-1 rounded-md border border-[var(--border)] bg-[var(--panel)] p-1">
+                <SettingsNavItem
+                  label="Appearance"
+                  icon={<Palette />}
+                  active={settingsSection === 'appearance'}
+                  onClick={() => setSettingsSection('appearance')}
+                />
+                <SettingsNavItem
+                  label="Shortcuts"
+                  icon={<Keyboard />}
+                  active={settingsSection === 'shortcuts'}
+                  onClick={() => setSettingsSection('shortcuts')}
+                />
+                <SettingsNavItem
+                  label="About"
+                  icon={<Info />}
+                  active={settingsSection === 'about'}
+                  onClick={() => setSettingsSection('about')}
+                />
+              </nav>
 
-              <PreferenceRow label="Font Size">
-                <Select
-                  value={String(settings.editorFontSize)}
-                  onValueChange={(value) => {
-                    void persistSettings({
-                      ...settings,
-                      editorFontSize: Number(value)
-                    })
-                  }}
-                >
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[12, 13, 14, 15, 16, 18].map((size) => (
-                      <SelectItem key={size} value={String(size)}>
-                        {size}px
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </PreferenceRow>
+              <section className="flex min-w-0 flex-col gap-3 rounded-md border border-[var(--border)] bg-[var(--panel)] p-4">
+                {settingsSection === 'appearance' ? (
+                  <>
+                    <PreferenceRow label="Theme">
+                      <Select
+                        value={settings.theme}
+                        onValueChange={(value: AppSnapshot['settings']['theme']) => {
+                          void persistSettings({
+                            ...settings,
+                            theme: value
+                          })
+                        }}
+                      >
+                        <SelectTrigger className="w-[140px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="system">System</SelectItem>
+                          <SelectItem value="light">Light</SelectItem>
+                          <SelectItem value="dark">Dark</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </PreferenceRow>
+
+                    <PreferenceRow label="Font Size">
+                      <Select
+                        value={String(settings.editorFontSize)}
+                        onValueChange={(value) => {
+                          void persistSettings({
+                            ...settings,
+                            editorFontSize: Number(value)
+                          })
+                        }}
+                      >
+                        <SelectTrigger className="w-[140px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[12, 13, 14, 15, 16, 18].map((size) => (
+                            <SelectItem key={size} value={String(size)}>
+                              {size}px
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </PreferenceRow>
+                  </>
+                ) : null}
+
+                {settingsSection === 'shortcuts' ? (
+                  <>
+                    <div className="flex flex-col gap-2">
+                      <p className="text-sm font-medium text-[var(--foreground)]">
+                        Global Shortcut
+                      </p>
+                      <p className="text-sm text-[var(--muted)]">
+                        Press this shortcut anywhere to open Peel, create a new JSON, and paste
+                        clipboard content.
+                      </p>
+                    </div>
+                    <Separator />
+                    <PreferenceRow label="Shortcut">
+                      <Input
+                        value={quickPasteShortcutDraft}
+                        placeholder={isCapturingShortcut ? 'Press keys...' : 'Not set'}
+                        readOnly
+                        onFocus={() => setIsCapturingShortcut(true)}
+                        onBlur={() => setIsCapturingShortcut(false)}
+                        onKeyDown={(event) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+
+                          if (event.key === 'Escape') {
+                            setIsCapturingShortcut(false)
+                            ;(event.currentTarget as HTMLInputElement).blur()
+                            return
+                          }
+
+                          if (
+                            (event.key === 'Backspace' || event.key === 'Delete') &&
+                            !event.metaKey &&
+                            !event.ctrlKey &&
+                            !event.altKey &&
+                            !event.shiftKey
+                          ) {
+                            setQuickPasteShortcutDraft('')
+                            return
+                          }
+
+                          const nextShortcut = buildShortcutFromEvent(event)
+
+                          if (!nextShortcut) {
+                            return
+                          }
+
+                          setQuickPasteShortcutDraft(nextShortcut)
+                          setIsCapturingShortcut(false)
+                          ;(event.currentTarget as HTMLInputElement).blur()
+                        }}
+                        className="w-[220px]"
+                      />
+                    </PreferenceRow>
+                    <p className="text-xs text-[var(--muted)]">
+                      Click input then press keys. Use Backspace to clear, Esc to cancel capture.
+                    </p>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          setQuickPasteShortcutDraft('')
+                          try {
+                            await persistSettings({
+                              ...settings,
+                              quickPasteShortcut: ''
+                            })
+                            toast.success('Global shortcut cleared.')
+                          } catch (error) {
+                            toast.error(
+                              error instanceof Error ? error.message : 'Failed to clear shortcut.'
+                            )
+                          }
+                        }}
+                      >
+                        Clear
+                      </Button>
+                      <Button
+                        variant="accent"
+                        onClick={async () => {
+                          const accelerator = toAcceleratorShortcut(quickPasteShortcutDraft.trim())
+                          try {
+                            await persistSettings({
+                              ...settings,
+                              quickPasteShortcut: accelerator
+                            })
+                            toast.success(
+                              quickPasteShortcutDraft.trim().length
+                                ? 'Global shortcut saved.'
+                                : 'Global shortcut cleared.'
+                            )
+                          } catch (error) {
+                            toast.error(
+                              error instanceof Error
+                                ? error.message
+                                : 'Failed to save global shortcut.'
+                            )
+                          }
+                        }}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  </>
+                ) : null}
+
+                {settingsSection === 'about' ? (
+                  <div className="flex flex-col gap-2 text-sm">
+                    <p className="font-medium text-[var(--foreground)]">Peel Desktop</p>
+                    <p className="text-[var(--muted)]">
+                      A fast JSON formatter and extractor built for macOS.
+                    </p>
+                    <Separator />
+                    <PreferenceRow label="Renderer">
+                      <span className="text-[var(--muted)]">Electron + React + Monaco</span>
+                    </PreferenceRow>
+                    <PreferenceRow label="Current Theme">
+                      <span className="text-[var(--muted)]">
+                        {settings.theme === 'system' ? 'System' : capitalize(settings.theme)}
+                      </span>
+                    </PreferenceRow>
+                  </div>
+                ) : null}
+              </section>
             </div>
 
             <DialogFooter>
@@ -1135,7 +1280,7 @@ export default function App(): React.JSX.Element {
           </DialogContent>
         </Dialog>
       </div>
-      <Toaster theme={resolvedTheme} closeButton richColors />
+      <Toaster theme={resolvedTheme} position="top-right" closeButton richColors />
     </TooltipProvider>
   )
 }
@@ -1228,7 +1373,11 @@ function HistorySection({
                             void onTogglePin(record)
                           }}
                         >
-                          {record.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
+                          {record.pinned ? (
+                            <PinOff className="size-4" />
+                          ) : (
+                            <Pin className="size-4" />
+                          )}
                           {record.pinned ? 'Unpin' : 'Pin'}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
@@ -1290,7 +1439,7 @@ function PanelFrame({
 }): React.JSX.Element {
   return (
     <section className="grid min-h-0 grid-rows-[36px_minmax(0,1fr)] bg-[var(--panel)]">
-      <header className="flex items-center justify-between border-b border-[var(--border)] px-4">
+      <header className="flex items-center justify-between border-b border-[var(--border)] pl-6 pr-4">
         <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-xs">
           <span className="shrink-0 font-medium">{title}</span>
           <span className="peel-status-dot shrink-0" data-tone={statusTone} />
@@ -1326,7 +1475,7 @@ function StatusItem({
 }): React.JSX.Element {
   return (
     <div className="flex items-center gap-1.5">
-      {tone ? <span className="peel-status-dot" data-tone={tone} /> : null}
+      {tone ? <span className="peel-status-dot peel-status-dot--static" data-tone={tone} /> : null}
       <span className="text-[var(--muted-foreground)]">{label}:</span>
       <span>{value}</span>
     </div>
@@ -1348,11 +1497,37 @@ function PreferenceRow({
   )
 }
 
+function SettingsNavItem({
+  label,
+  icon,
+  active,
+  onClick
+}: {
+  label: string
+  icon: React.ReactNode
+  active: boolean
+  onClick: () => void
+}): React.JSX.Element {
+  return (
+    <button
+      className={cn(
+        'flex h-8 items-center gap-2 rounded-md px-2 text-sm transition-colors',
+        active
+          ? 'bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-[var(--foreground)]'
+          : 'text-[var(--muted)] hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)] hover:text-[var(--foreground)]'
+      )}
+      onClick={onClick}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  )
+}
 
 function statusLabel(status: ExtractionResult['status']): string {
   switch (status) {
     case 'success':
-      return 'Ready'
+      return ''
     case 'empty':
       return 'No result'
     case 'error':
@@ -1375,4 +1550,78 @@ function toneForResult(status: ExtractionResult['status']): 'success' | 'danger'
 
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1)
+}
+
+function buildShortcutFromEvent(event: React.KeyboardEvent<HTMLInputElement>): string | null {
+  const modifiers: string[] = []
+  const isMac = navigator.platform.toLowerCase().includes('mac')
+
+  if (event.metaKey) modifiers.push('Command')
+  if (event.ctrlKey) modifiers.push('Control')
+  if (event.altKey) modifiers.push(isMac ? 'Option' : 'Alt')
+  if (event.shiftKey) modifiers.push('Shift')
+
+  const key = normalizeShortcutKey(event)
+  if (!key) {
+    return null
+  }
+
+  if (!modifiers.length) {
+    return null
+  }
+
+  return [...modifiers, key].join('+')
+}
+
+function normalizeShortcutKey(event: React.KeyboardEvent<HTMLInputElement>): string | null {
+  const { key, code } = event
+
+  if (code === 'Space') {
+    return 'Space'
+  }
+
+  if (key === 'Meta' || key === 'Control' || key === 'Alt' || key === 'Shift') {
+    return null
+  }
+
+  if (key.length === 1 && /^[a-z0-9]$/i.test(key)) {
+    return key.toUpperCase()
+  }
+
+  if (/^F\d{1,2}$/i.test(key)) {
+    return key.toUpperCase()
+  }
+
+  const keyMap: Record<string, string> = {
+    ArrowUp: 'Up',
+    ArrowDown: 'Down',
+    ArrowLeft: 'Left',
+    ArrowRight: 'Right',
+    ' ': 'Space',
+    Spacebar: 'Space',
+    Enter: 'Enter',
+    Tab: 'Tab',
+    Backspace: 'Backspace',
+    Delete: 'Delete',
+    Home: 'Home',
+    End: 'End',
+    PageUp: 'PageUp',
+    PageDown: 'PageDown',
+    Insert: 'Insert'
+  }
+
+  return keyMap[key] ?? null
+}
+
+function toAcceleratorShortcut(shortcut: string): string {
+  return shortcut.replaceAll('Option', 'Alt')
+}
+
+function toDisplayShortcut(shortcut: string): string {
+  const isMac = navigator.platform.toLowerCase().includes('mac')
+  if (!isMac) {
+    return shortcut
+  }
+
+  return shortcut.replaceAll('Alt', 'Option')
 }

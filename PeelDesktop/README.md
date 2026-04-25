@@ -34,3 +34,4 @@ npm run build
 - Local settings and history storage
 - Native dialogs for open and export
 - System/light/dark theme support
+

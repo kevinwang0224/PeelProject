@@ -4,14 +4,12 @@ export type ExtractionStatus = 'idle' | 'success' | 'empty' | 'error'
 export type ResultDisplayStyle = 'plainText' | 'structuredJson'
 export type MenuAction =
   | 'new-json'
+  | 'new-json-from-clipboard'
   | 'open-json'
   | 'export-json'
   | 'format-json'
   | 'compact-json'
-  | 'copy'
-  | 'paste'
   | 'find'
-  | 'select-all'
 
 export interface JsonValidationIssue {
   message: string
@@ -33,6 +31,7 @@ export interface HistoryRecord {
 export interface AppSettings {
   theme: ThemePreference
   editorFontSize: number
+  quickPasteShortcut: string
 }
 
 export interface AppSnapshot {
@@ -104,7 +103,8 @@ export const STORAGE_SCHEMA_VERSION = 1
 
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
-  editorFontSize: 14
+  editorFontSize: 14,
+  quickPasteShortcut: ''
 }
 
 export const DEFAULT_SNAPSHOT: AppSnapshot = {
