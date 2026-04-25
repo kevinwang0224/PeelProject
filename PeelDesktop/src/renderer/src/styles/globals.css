@@ -131,6 +131,15 @@ select {
   overflow: hidden;
 }
 
+.peel-window-drag {
+  -webkit-app-region: drag;
+}
+
+.peel-window-no-drag,
+.peel-window-drag :is(button, input, textarea, select, a, [role="button"]) {
+  -webkit-app-region: no-drag;
+}
+
 .peel-panel {
   background: var(--panel);
   border: 1px solid var(--border);

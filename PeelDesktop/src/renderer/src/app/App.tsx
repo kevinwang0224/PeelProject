@@ -609,7 +609,7 @@ export default function App(): React.JSX.Element {
         >
           {/* ── Row 1, Col 1: Sidebar header (sibling of main header → same row height) ── */}
           <div
-            className="flex items-center gap-0.5 border-b border-r border-[var(--border)] bg-[color-mix(in_srgb,var(--background)_92%,var(--panel))]"
+            className="peel-window-drag flex items-center gap-0.5 border-b border-r border-[var(--border)] bg-[color-mix(in_srgb,var(--background)_92%,var(--panel))]"
             style={{
               paddingLeft: sidebarCollapsed ? 88 : undefined,
               paddingRight: sidebarCollapsed ? 8 : 8,
@@ -647,7 +647,7 @@ export default function App(): React.JSX.Element {
               <AnimatePresence>
                 {newMenuOpen && (
                   <motion.div
-                    className="absolute left-0 top-full z-50 mt-1 min-w-[148px] overflow-hidden rounded-md border border-[var(--border)] bg-[var(--panel)] py-1 shadow-lg"
+                    className="peel-window-no-drag absolute left-0 top-full z-50 mt-1 min-w-[148px] overflow-hidden rounded-md border border-[var(--border)] bg-[var(--panel)] py-1 shadow-lg"
                     initial={{ opacity: 0, y: -4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
@@ -680,7 +680,7 @@ export default function App(): React.JSX.Element {
           </div>
 
           {/* ── Row 1, Col 2: Main header / title toolbar ── */}
-          <header className="flex h-9 shrink-0 items-center border-b border-[var(--border)] bg-[var(--panel)] px-4">
+          <header className="peel-window-drag flex h-9 shrink-0 items-center border-b border-[var(--border)] bg-[var(--panel)] px-4">
             {isEditingTitle ? (
               <input
                 autoFocus
