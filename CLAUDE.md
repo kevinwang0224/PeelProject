@@ -5,6 +5,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Test Commands
 
 ```bash
+cd /Users/kevin/dev/myprojects/PeelProject
+
+# Desktop app
+npm install
+npm run lint -w @peel/desktop
+npm run test -w @peel/desktop
+npm run typecheck -w @peel/desktop
+npm run build -w @peel/desktop
+
+# Shared TypeScript helpers
+npm run test -w @peel/shared
+npm run typecheck -w @peel/shared
+
 cd PeelApp
 
 # Generate Xcode project from project.yml (also builds)
@@ -24,9 +37,11 @@ xcodebuild -project Peel.xcodeproj -scheme Peel -configuration Debug -derivedDat
 
 ## Project Overview
 
-Peel is a native macOS JSON formatter and editor. Zero third-party dependencies — only Apple frameworks (SwiftUI, SwiftData, Foundation, JavaScriptCore, WebKit/AppKit).
+Peel is a JSON formatter and editor. The active desktop rewrite lives in `apps/desktop/` and uses Electron, React, TypeScript, Tailwind CSS, shadcn/ui, and Monaco.
 
-Active code lives in `PeelApp/`. The old `Peel/` directory is deprecated.
+Platform-neutral TypeScript JSON helpers live in `packages/shared/`. A browser extension workspace is reserved at `apps/extension/`.
+
+The old native macOS app remains in `PeelApp/` for reference and fallback. The old `Peel/` directory is deprecated.
 
 ## Architecture
 

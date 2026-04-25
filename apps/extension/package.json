@@ -1,0 +1,9 @@
+{
+  "name": "@peel/extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser extension workspace for Peel.",
+  "dependencies": {
+    "@peel/shared": "file:../../packages/shared"
+  }
+}

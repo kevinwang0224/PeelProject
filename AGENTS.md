@@ -5,24 +5,29 @@
 ## 项目定位
 
 `Peel` 是 JSON 格式化和编辑工具，目标是轻量、启动快、界面简洁。
-- 新版重做工程在 `PeelDesktop/`，技术栈是 `Electron + React + TypeScript + Tailwind CSS + shadcn/ui + Monaco`
+- 新版重做工程在 `apps/desktop/`，技术栈是 `Electron + React + TypeScript + Tailwind CSS + shadcn/ui + Monaco`
+- 后续浏览器扩展代码放在 `apps/extension/`
+- TypeScript 公共 JSON 逻辑放在 `packages/shared/`
 - 旧原生工程保留在 `PeelApp/`，主要用于参考和回退，不要把新功能优先做回旧工程
-- 当前桌面版应用源码在 `PeelDesktop/src/`
+- 当前桌面版应用源码在 `apps/desktop/src/`
 - 原生版应用源码在 `PeelApp/Peel/`
 - 旧 `Peel/` 路径在淘汰，后续不要恢复旧目录
 - 编辑器主方案统一基于 `Monaco`，不要再按旧 `NSTextView` 主方案设计新功能
 
 ## 关键目录
 
-- `PeelDesktop/src/main/`：主进程，窗口、菜单、文件、剪贴板、本地存储
-- `PeelDesktop/src/preload/`：预加载桥接，只暴露白名单接口
-- `PeelDesktop/src/renderer/src/app/`：主界面与交互
-- `PeelDesktop/src/renderer/src/components/`：界面组件与编辑器封装
-- `PeelDesktop/src/renderer/src/styles/`：全局主题和样式变量
-- `PeelDesktop/src/shared/`：共享类型、JSON 处理、提取逻辑、历史记录工具
-- `PeelDesktop/docs/implementation-notes.md`：这次重做的实现说明，包含视觉方向和交互原则
-- `PeelDesktop/package.json`：前端和桌面端脚本入口
-- `PeelDesktop/electron-builder.yml`：打包配置
+- `apps/desktop/src/main/`：主进程，窗口、菜单、文件、剪贴板、本地存储
+- `apps/desktop/src/preload/`：预加载桥接，只暴露白名单接口
+- `apps/desktop/src/renderer/src/app/`：主界面与交互
+- `apps/desktop/src/renderer/src/components/`：界面组件与编辑器封装
+- `apps/desktop/src/renderer/src/styles/`：全局主题和样式变量
+- `apps/desktop/src/shared/`：Electron 专用 IPC、preload API 类型
+- `apps/desktop/docs/implementation-notes.md`：这次重做的实现说明，包含视觉方向和交互原则
+- `apps/desktop/package.json`：桌面端脚本入口
+- `apps/desktop/electron-builder.yml`：打包配置
+- `apps/extension/`：浏览器扩展工作区，后续扩展功能放这里
+- `packages/shared/src/`：平台无关的 JSON 处理、提取逻辑、历史记录工具和基础类型
+- `package.json`：npm workspaces 根配置
 - `PeelApp/project.yml`：项目配置源，优先改这里，不直接改 `Peel.xcodeproj`
 - `PeelApp/generate_project.sh`：生成并构建工程
 - `PeelApp/Peel/App/PeelApp.swift`：应用入口、菜单、全局状态
@@ -38,12 +43,14 @@
 
 ## 实现与行为约定
 
-- `PeelDesktop/` 的界面、状态和交互都在 JavaScript 工程里处理，不再依赖原生壳里嵌网页编辑器的旧方案
-- `PeelDesktop/` 的系统能力统一通过 `window.peel` 访问，不让界面直接碰 Node 或 Electron API
+- `apps/desktop/` 的界面、状态和交互都在 JavaScript 工程里处理，不再依赖原生壳里嵌网页编辑器的旧方案
+- `apps/desktop/` 的系统能力统一通过 `window.peel` 访问，不让界面直接碰 Node 或 Electron API
 - 新版历史记录和设置先用本地 JSON 文件存储
 - 编辑器主流程基于 `Monaco`，不要破坏高亮、错误定位、复制粘贴、查找、运行快捷键
-- JSON 处理统一走 `PeelDesktop/src/shared/json.ts`
-- JSON 提取统一走 `PeelDesktop/src/shared/extraction.ts`，支持 JavaScript 和 JSONPath
+- JSON 处理统一走 `packages/shared/src/json.ts`
+- JSON 提取统一走 `packages/shared/src/extraction.ts`，支持 JavaScript 和 JSONPath
+- 桌面端 Electron API、IPC、菜单、文件系统、剪贴板能力留在 `apps/desktop/src/shared/`、`apps/desktop/src/main/`、`apps/desktop/src/preload/`
+- 浏览器扩展只复用 `@peel/shared`，不要依赖桌面端的 Electron API
 - 提取执行放后台线程，避免卡住界面
 - 编辑内容会自动写回当前记录，不是手动保存模式
 - 当前内容清空后，结束编辑或切换选择时，空记录可能自动删除
@@ -55,26 +62,29 @@
 
 ## 开发约定
 
-- 新功能默认优先改 `PeelDesktop/`，只有明确在修原生版问题时才改 `PeelApp/`
-- 做 `PeelDesktop/` 时，先看 `PeelDesktop/docs/implementation-notes.md` 里的设计令牌和组件规范，保持 macOS 原生极简风格
+- 新功能默认优先改 `apps/desktop/` 或 `apps/extension/`，只有明确在修原生版问题时才改 `PeelApp/`
+- 做桌面端 UI 时，先看 `apps/desktop/docs/implementation-notes.md` 里的设计令牌和组件规范，保持 macOS 原生极简风格
 - `shadcn/ui` 只当基础件使用，主布局、侧栏、工作区、状态栏必须自己控制
-- 改 `PeelDesktop/` 功能或配置后，优先跑：
-  - `npm run lint`
-  - `npm run test`
-  - `npm run typecheck`
-  - `npm run build`
+- 改 `apps/desktop/` 功能或配置后，优先跑：
+  - `npm run lint -w @peel/desktop`
+  - `npm run test -w @peel/desktop`
+  - `npm run typecheck -w @peel/desktop`
+  - `npm run build -w @peel/desktop`
+- 改 `packages/shared/` 后，优先跑：
+  - `npm run test -w @peel/shared`
+  - `npm run typecheck -w @peel/shared`
 - 改项目设置、target、构建参数时，优先改 `PeelApp/project.yml`
 - 改了项目配置后，记得重新生成工程
 - 只在改动 `PeelApp/` 功能或工程配置时，优先跑 `xcodebuild test`，不要只做 build
 - 不要把编辑器主流程改回 `NSTextView`
 - 改动 `PeelApp/Peel/Resources/Monaco/` 时，同步检查许可与声明文件是否需要更新
 - 不提交 `build/`、`DerivedData/`、`xcuserdata/`、`.xcuserstate` 等本机生成内容
-- 不提交 `PeelDesktop/node_modules/`、`PeelDesktop/out/`、`PeelDesktop/dist/` 等生成内容
+- 不提交 `node_modules/`、`apps/*/node_modules/`、`apps/*/out/`、`apps/*/dist/` 等生成内容
 - 功能范围、目录结构或验证方式变了时，顺手更新本文件
 
 ## UI 规范
 
-详细设计令牌和组件约定见 `PeelDesktop/docs/implementation-notes.md`。
+详细设计令牌和组件约定见 `apps/desktop/docs/implementation-notes.md`。
 
 ### 视觉方向
 
@@ -147,12 +157,12 @@
 ## 常用命令
 
 ```bash
-cd /Users/kevin/dev/myprojects/PeelProject/PeelDesktop
+cd /Users/kevin/dev/myprojects/PeelProject
 npm install
-npm run lint
-npm run test
-npm run typecheck
-npm run build
+npm run lint -w @peel/desktop
+npm run test -w @peel/desktop
+npm run typecheck -w @peel/desktop
+npm run build -w @peel/desktop
 
 cd /Users/kevin/dev/myprojects/PeelProject/PeelApp
 ./generate_project.sh
