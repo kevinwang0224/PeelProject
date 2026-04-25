@@ -1,0 +1,39 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <clipPath id="iconClip">
+      <rect x="84" y="84" width="856" height="856" rx="180"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#iconClip)">
+    <rect x="84" y="84" width="856" height="856" rx="180" fill="#000000"/>
+  </g>
+
+  <g
+    font-family="Monaco, Menlo, monospace"
+    fill="#FFFFFF"
+    stroke="#FFFFFF"
+    stroke-width="8"
+    stroke-linejoin="round"
+    paint-order="stroke fill"
+  >
+    <text
+      x="168"
+      y="525"
+      font-size="220"
+      text-anchor="middle"
+      dominant-baseline="middle">{</text>
+    <text
+      x="512"
+      y="525"
+      font-size="200"
+      text-anchor="middle"
+      dominant-baseline="middle">Peel</text>
+    <text
+      x="856"
+      y="525"
+      font-size="220"
+      text-anchor="middle"
+      dominant-baseline="middle">}</text>
+  </g>
+</svg>
