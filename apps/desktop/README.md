@@ -11,10 +11,6 @@ Electron-based desktop rewrite of Peel.
 - shadcn/ui primitives
 - Monaco editor
 
-## Design Notes
-
-See [docs/implementation-notes.md](/Users/kevin/dev/myprojects/PeelProject/apps/desktop/docs/implementation-notes.md).
-
 ## Commands
 
 ```bash
