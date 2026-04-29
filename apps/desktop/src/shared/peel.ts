@@ -41,6 +41,7 @@ export interface ExportJsonPayload {
 }
 
 export interface PeelAPI {
+  rendererReady: () => void
   bootstrap: () => Promise<AppSnapshot>
   history: {
     create: (seed?: HistoryRecordSeed) => Promise<CreateHistoryResult>

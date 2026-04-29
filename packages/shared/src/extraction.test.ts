@@ -19,6 +19,33 @@ describe("extraction helpers", () => {
     expect(result.text).toBe("Peel");
   });
 
+  it("renders function values from javascript queries as plain text", async () => {
+    const result = await runExtraction({
+      mode: "javascript",
+      query: "data.items.map",
+      data,
+    });
+
+    expect(result.status).toBe("success");
+    expect(result.displayStyle).toBe("plainText");
+    expect(result.text).toBe("[Function: map]");
+  });
+
+  it("renders top-level array methods as plain text", async () => {
+    const result = await runExtraction({
+      mode: "javascript",
+      query: "data.flat",
+      data: [
+        [1],
+        [2],
+      ],
+    });
+
+    expect(result.status).toBe("success");
+    expect(result.displayStyle).toBe("plainText");
+    expect(result.text).toBe("[Function: flat]");
+  });
+
   it("returns structured json from jsonpath queries", async () => {
     const result = await runExtraction({
       mode: "jsonpath",

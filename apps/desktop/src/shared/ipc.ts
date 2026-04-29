@@ -1,4 +1,5 @@
 export const IPC_CHANNELS = {
+  rendererReady: 'peel:renderer-ready',
   bootstrap: 'peel:bootstrap',
   historyCreate: 'peel:history:create',
   historySave: 'peel:history:save',

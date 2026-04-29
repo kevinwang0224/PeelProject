@@ -10,6 +10,7 @@ ipcRenderer.on(IPC_CHANNELS.menuAction, (_event, action: MenuAction) => {
 })
 
 const peelApi: PeelAPI = {
+  rendererReady: () => ipcRenderer.send(IPC_CHANNELS.rendererReady),
   bootstrap: () => ipcRenderer.invoke(IPC_CHANNELS.bootstrap),
   history: {
     create: (seed) => ipcRenderer.invoke(IPC_CHANNELS.historyCreate, seed),

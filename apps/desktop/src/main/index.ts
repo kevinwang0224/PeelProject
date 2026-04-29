@@ -41,6 +41,29 @@ const storage = new PeelStorage(
 let registeredQuickPasteShortcut = ''
 /** 应用菜单的 IPC 目标：hiddenInset 等场景下 getFocusedWindow() 可能为 null，需回退到主窗 */
 let peelMainBrowserWindow: BrowserWindow | null = null
+const windowReadiness = new WeakMap<
+  BrowserWindow,
+  {
+    readyToShow: boolean
+    rendererReady: boolean
+    fallbackTimer: ReturnType<typeof setTimeout> | null
+  }
+>()
+
+function showWindowWhenReady(window: BrowserWindow): void {
+  const readiness = windowReadiness.get(window)
+
+  if (!readiness || !readiness.readyToShow || !readiness.rendererReady || window.isVisible()) {
+    return
+  }
+
+  if (readiness.fallbackTimer) {
+    clearTimeout(readiness.fallbackTimer)
+    readiness.fallbackTimer = null
+  }
+
+  window.show()
+}
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -60,8 +83,22 @@ function createWindow(): BrowserWindow {
     }
   })
 
+  const readiness = {
+    readyToShow: false,
+    rendererReady: false,
+    fallbackTimer: null as ReturnType<typeof setTimeout> | null
+  }
+
+  windowReadiness.set(mainWindow, readiness)
+
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    readiness.readyToShow = true
+    readiness.fallbackTimer = setTimeout(() => {
+      if (!mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+        mainWindow.show()
+      }
+    }, 2000)
+    showWindowWhenReady(mainWindow)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -85,6 +122,11 @@ function createWindow(): BrowserWindow {
 
   peelMainBrowserWindow = mainWindow
   mainWindow.on('closed', () => {
+    if (readiness.fallbackTimer) {
+      clearTimeout(readiness.fallbackTimer)
+      readiness.fallbackTimer = null
+    }
+
     if (peelMainBrowserWindow === mainWindow) {
       peelMainBrowserWindow = null
     }
@@ -94,6 +136,22 @@ function createWindow(): BrowserWindow {
 }
 
 function registerIpcHandlers(): void {
+  ipcMain.on(IPC_CHANNELS.rendererReady, (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+
+    if (!window) {
+      return
+    }
+
+    const readiness = windowReadiness.get(window)
+    if (!readiness) {
+      return
+    }
+
+    readiness.rendererReady = true
+    showWindowWhenReady(window)
+  })
+
   ipcMain.handle(IPC_CHANNELS.bootstrap, () => storage.bootstrap())
   ipcMain.handle(IPC_CHANNELS.historyCreate, (_event, seed?: HistoryRecordSeed) =>
     storage.createRecord(seed)

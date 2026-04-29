@@ -82,6 +82,33 @@ function renderExtractionValue(value: unknown): ExtractionResult {
     };
   }
 
+  if (typeof value === "function") {
+    return {
+      status: "success",
+      title: "Result",
+      text: `[Function${value.name ? `: ${value.name}` : ""}]`,
+      displayStyle: "plainText",
+    };
+  }
+
+  if (typeof value === "symbol") {
+    return {
+      status: "success",
+      title: "Result",
+      text: String(value),
+      displayStyle: "plainText",
+    };
+  }
+
+  if (typeof value === "bigint") {
+    return {
+      status: "success",
+      title: "Result",
+      text: `${value.toString()}n`,
+      displayStyle: "plainText",
+    };
+  }
+
   if (value === null) {
     return {
       status: "success",

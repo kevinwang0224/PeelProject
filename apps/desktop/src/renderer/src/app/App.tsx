@@ -128,6 +128,7 @@ export default function App(): React.JSX.Element {
   const activeEditorHandleRef = useRef<MonacoSurfaceHandle | null>(null)
   const mainContentRef = useRef<HTMLDivElement>(null)
   const splitContainerRef = useRef<HTMLDivElement>(null)
+  const rendererReadyNotifiedRef = useRef(false)
   const [newMenuOpen, setNewMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const newMenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -182,6 +183,27 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', resolvedTheme === 'dark')
   }, [resolvedTheme])
+
+  useEffect(() => {
+    if (!snapshot || rendererReadyNotifiedRef.current) {
+      return
+    }
+
+    let firstFrame = 0
+    let secondFrame = 0
+
+    firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        rendererReadyNotifiedRef.current = true
+        window.peel.rendererReady()
+      })
+    })
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame)
+      window.cancelAnimationFrame(secondFrame)
+    }
+  }, [snapshot])
 
   useEffect(() => {
     let mounted = true
@@ -639,7 +661,7 @@ export default function App(): React.JSX.Element {
         {/* ── Row 1: full-width header bar (sidebar controls | title toolbar) ── */}
         {/* ── Row 2: sidebar content | main editor ── */}
         <div
-          className="grid h-full grid-rows-[auto_minmax(0,1fr)] gap-x-px [will-change:grid-template-columns]"
+          className="grid h-full min-h-0 grid-rows-[36px_minmax(0,1fr)] gap-x-px overflow-hidden [will-change:grid-template-columns]"
           style={{
             gridTemplateColumns: sidebarCollapsed ? '160px minmax(0,1fr)' : '260px minmax(0,1fr)',
             transition: 'grid-template-columns 320ms cubic-bezier(0.32, 0.72, 0, 1)'
@@ -647,7 +669,7 @@ export default function App(): React.JSX.Element {
         >
           {/* ── Row 1, Col 1: Sidebar header (sibling of main header → same row height) ── */}
           <div
-            className="peel-window-drag flex items-center gap-0.5 border-b border-r border-[var(--border)] bg-[var(--panel)]"
+            className="peel-window-drag flex h-9 items-center gap-0.5 border-b border-r border-[var(--border)] bg-[var(--panel)]"
             style={{
               paddingLeft: sidebarCollapsed ? 88 : undefined,
               paddingRight: sidebarCollapsed ? 8 : 8,
@@ -844,9 +866,10 @@ export default function App(): React.JSX.Element {
           {/* ── Row 2, Col 2: Main Editor Area — 宽度由父级 grid-template-columns 过渡；不要用 Framer layout(transform)，否则 Monaco 选区/光标会错位 */}
           <main
             ref={mainContentRef}
-            className="grid min-h-0 gap-px bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]"
+            className="grid h-full min-h-0 gap-px overflow-hidden bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]"
             style={{
               gridColumn: sidebarCollapsed ? '1 / -1' : undefined,
+              height: 'calc(100vh - 36px)',
               gridTemplateRows: expressionCollapsed
                 ? 'minmax(160px, 1fr) 32px 36px'
                 : `minmax(160px, ${topPanelRatio}fr) 5px minmax(120px, ${1 - topPanelRatio}fr) 36px`
@@ -855,7 +878,7 @@ export default function App(): React.JSX.Element {
             {/* Top row: JSON (left) + drag handle + Result (right) */}
             <div
               ref={splitContainerRef}
-              className="grid min-h-0"
+              className="grid h-full min-h-0 overflow-hidden"
               style={{
                 gridTemplateColumns: !resultVisible
                   ? '1fr'
@@ -932,7 +955,7 @@ export default function App(): React.JSX.Element {
                   ariaLabel="Show Result"
                 />
               ) : (
-                <section className="grid min-h-0 grid-rows-[36px_minmax(0,1fr)] bg-[var(--panel)]">
+                <section className="grid size-full min-h-0 grid-rows-[36px_minmax(0,1fr)] overflow-hidden bg-[var(--panel)]">
                   <header className="flex items-center justify-between border-b border-[var(--border)] pl-6 pr-3">
                     <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-xs">
                       <span className="shrink-0 font-medium">Result</span>
@@ -1043,7 +1066,7 @@ export default function App(): React.JSX.Element {
                 />
 
                 {/* Bottom row: Expression Panel */}
-                <section className="grid min-h-0 grid-rows-[36px_minmax(0,1fr)] bg-[var(--panel)]">
+                <section className="grid size-full min-h-0 grid-rows-[36px_minmax(0,1fr)] overflow-hidden bg-[var(--panel)]">
                   <header className="flex items-center justify-between border-b border-[var(--border)] pl-6 pr-3">
                     <div className="flex items-center gap-2">
                       <Select value={extractionMode} onValueChange={handleExtractionModeChange}>
@@ -1095,7 +1118,7 @@ export default function App(): React.JSX.Element {
             )}
 
             {/* Status Bar — below expression panel */}
-            <footer className="flex items-center justify-between border-t border-[var(--border)] bg-[var(--panel)] px-4 text-xs text-[var(--muted)]">
+            <footer className="flex h-9 items-center justify-between border-t border-[var(--border)] bg-[var(--panel)] px-4 text-xs text-[var(--muted)]">
               <div className="flex items-center gap-4">
                 <StatusItem
                   label="Validation"
@@ -1554,7 +1577,7 @@ function PanelFrame({
   children: React.ReactNode
 }): React.JSX.Element {
   return (
-    <section className="grid min-h-0 grid-rows-[36px_minmax(0,1fr)] bg-[var(--panel)]">
+    <section className="grid size-full min-h-0 grid-rows-[36px_minmax(0,1fr)] overflow-hidden bg-[var(--panel)]">
       <header className="flex items-center justify-between border-b border-[var(--border)] pl-6 pr-4">
         <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-xs">
           <span className="shrink-0 font-medium">{title}</span>
