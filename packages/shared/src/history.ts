@@ -1,4 +1,11 @@
-import type { HistoryRecord, HistoryRecordSeed } from "./types";
+import {
+  DEFAULT_EXTRACTION_MODE,
+  DEFAULT_EXTRACTION_QUERIES,
+  type HistoryExtractionSeed,
+  type HistoryExtractionState,
+  type HistoryRecord,
+  type HistoryRecordSeed,
+} from "./types";
 
 export function createDefaultTitle(date = new Date()): string {
   const year = date.getFullYear();
@@ -29,9 +36,22 @@ export function createHistoryRecord(
     id: globalThis.crypto.randomUUID(),
     title: normalizeTitle(seed.title, now),
     content: seed.content ?? "",
+    extraction: createHistoryExtractionState(seed.extraction),
     createdAt: isoNow,
     updatedAt: isoNow,
     pinned: false,
+  };
+}
+
+export function createHistoryExtractionState(
+  seed: HistoryExtractionSeed = {},
+): HistoryExtractionState {
+  return {
+    mode: seed.mode ?? DEFAULT_EXTRACTION_MODE,
+    queries: {
+      ...DEFAULT_EXTRACTION_QUERIES,
+      ...(seed.queries ?? {}),
+    },
   };
 }
 

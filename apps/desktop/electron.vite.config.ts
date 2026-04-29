@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: ['@peel/shared'] })],
     resolve: {
       alias: {
         '@main': resolve('src/main'),
@@ -15,7 +15,7 @@ export default defineConfig({
     }
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: ['@peel/shared'] })],
     resolve: {
       alias: {
         '@desktop/shared': resolve('src/shared'),

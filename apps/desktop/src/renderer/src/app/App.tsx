@@ -818,7 +818,7 @@ export default function App(): React.JSX.Element {
     async (action: MenuAction): Promise<void> => {
       switch (action) {
         case 'new-json':
-          await handleCreateRecord('{}')
+          await handleCreateRecord('')
           break
         case 'new-json-from-clipboard': {
           const clipboardText = await window.peel.clipboard.readText()
@@ -897,7 +897,7 @@ export default function App(): React.JSX.Element {
               }}
             >
               <button
-                onClick={() => void handleCreateRecord('{}')}
+                onClick={() => void handleCreateRecord('')}
                 className="flex size-7 items-center justify-center gap-0.5 rounded-md pl-0.5 pr-1 text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--foreground)_5%,transparent)] hover:text-[var(--foreground)]"
               >
                 <Plus size={18} />
@@ -917,7 +917,7 @@ export default function App(): React.JSX.Element {
                       className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-[var(--foreground)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]"
                       onClick={() => {
                         setNewMenuOpen(false)
-                        void handleCreateRecord('{}')
+                        void handleCreateRecord('')
                       }}
                     >
                       <Plus className="size-3.5 text-[var(--muted)]" />

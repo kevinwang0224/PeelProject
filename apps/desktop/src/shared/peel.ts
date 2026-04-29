@@ -1,13 +1,22 @@
 import type { AppSettings, AppSnapshot, HistoryRecord, HistoryRecordSeed } from '@peel/shared/types'
 
-export { DEFAULT_SETTINGS, DEFAULT_SNAPSHOT, STORAGE_SCHEMA_VERSION } from '@peel/shared/types'
+export {
+  DEFAULT_EXTRACTION_MODE,
+  DEFAULT_EXTRACTION_QUERIES,
+  DEFAULT_SETTINGS,
+  DEFAULT_SNAPSHOT,
+  STORAGE_SCHEMA_VERSION
+} from '@peel/shared/types'
 export type {
   AppSettings,
   AppSnapshot,
+  ExtractionQueries,
   ExtractionMode,
   ExtractionRequest,
   ExtractionResult,
   ExtractionStatus,
+  HistoryExtractionSeed,
+  HistoryExtractionState,
   HistoryRecord,
   HistoryRecordSeed,
   JsonValidationIssue,

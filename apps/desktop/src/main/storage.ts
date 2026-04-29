@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import {
+  createHistoryExtractionState,
   createHistoryRecord,
   normalizeTitle,
   sortHistoryRecords,
@@ -13,6 +14,8 @@ import {
   STORAGE_SCHEMA_VERSION,
   type AppSettings,
   type AppSnapshot,
+  type ExtractionQueries,
+  type HistoryExtractionSeed,
   type CreateHistoryResult,
   type HistoryRecord,
   type HistoryRecordSeed
@@ -128,13 +131,18 @@ export class PeelStorage {
 
     await mkdir(dirname(this.filePath), { recursive: true })
 
-    const currentSnapshot = await readSnapshot(this.filePath)
-    const shouldMigrateLegacy = !(await fileExists(this.migrationMarkerPath))
-    const legacySnapshots = shouldMigrateLegacy
+    const currentSnapshotResult = await readSnapshot(this.filePath)
+    const currentSnapshot = currentSnapshotResult?.snapshot ?? null
+    const shouldMigrateLegacy =
+      !(await fileExists(this.migrationMarkerPath)) ||
+      !currentSnapshot ||
+      currentSnapshot.history.length === 0
+    const legacySnapshotResults = shouldMigrateLegacy
       ? (
           await Promise.all(this.legacyFilePaths.map((legacyPath) => readSnapshot(legacyPath)))
-        ).filter((snapshot): snapshot is AppSnapshot => Boolean(snapshot))
+        ).filter((result): result is SnapshotReadResult => Boolean(result))
       : []
+    const legacySnapshots = legacySnapshotResults.map((result) => result.snapshot)
 
     const snapshots = [...legacySnapshots, currentSnapshot].filter(
       (snapshot): snapshot is AppSnapshot => Boolean(snapshot)
@@ -142,8 +150,11 @@ export class PeelStorage {
 
     this.snapshot = snapshots.length ? mergeSnapshots(snapshots) : DEFAULT_SNAPSHOT
 
-    if (legacySnapshots.length) {
+    if (legacySnapshots.length || currentSnapshotResult?.needsWrite) {
       await this.writeSnapshot(this.snapshot)
+    }
+
+    if (legacySnapshots.length) {
       await writeFile(this.migrationMarkerPath, new Date().toISOString(), 'utf8')
     }
 
@@ -175,10 +186,20 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
-async function readSnapshot(filePath: string): Promise<AppSnapshot | null> {
+interface SnapshotReadResult {
+  snapshot: AppSnapshot
+  needsWrite: boolean
+}
+
+async function readSnapshot(filePath: string): Promise<SnapshotReadResult | null> {
   try {
     const raw = await readFile(filePath, 'utf8')
-    return coerceSnapshot(JSON.parse(raw))
+    const parsed = JSON.parse(raw)
+    const snapshot = coerceSnapshot(parsed)
+    return {
+      snapshot,
+      needsWrite: JSON.stringify(parsed) !== JSON.stringify(snapshot)
+    }
   } catch {
     return null
   }
@@ -223,7 +244,11 @@ function coerceSnapshot(value: unknown): AppSnapshot {
   }
 
   const input = value as Partial<AppSnapshot>
-  const history = Array.isArray(input.history) ? input.history.filter(isHistoryRecord) : []
+  const history = Array.isArray(input.history)
+    ? input.history
+        .map(coerceHistoryRecord)
+        .filter((record): record is HistoryRecord => Boolean(record))
+    : []
 
   return {
     schemaVersion: STORAGE_SCHEMA_VERSION,
@@ -235,19 +260,64 @@ function coerceSnapshot(value: unknown): AppSnapshot {
   }
 }
 
-function isHistoryRecord(value: unknown): value is HistoryRecord {
+function coerceHistoryRecord(value: unknown): HistoryRecord | null {
   if (!value || typeof value !== 'object') {
-    return false
+    return null
   }
 
   const record = value as Partial<HistoryRecord>
 
-  return (
-    typeof record.id === 'string' &&
-    typeof record.title === 'string' &&
-    typeof record.content === 'string' &&
-    typeof record.createdAt === 'string' &&
-    typeof record.updatedAt === 'string' &&
-    typeof record.pinned === 'boolean'
-  )
+  if (
+    typeof record.id !== 'string' ||
+    typeof record.title !== 'string' ||
+    typeof record.content !== 'string' ||
+    typeof record.createdAt !== 'string' ||
+    typeof record.updatedAt !== 'string' ||
+    typeof record.pinned !== 'boolean'
+  ) {
+    return null
+  }
+
+  return {
+    id: record.id,
+    title: record.title,
+    content: record.content,
+    extraction: createHistoryExtractionState(coerceHistoryExtractionSeed(record.extraction)),
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    pinned: record.pinned
+  }
+}
+
+function coerceHistoryExtractionSeed(value: unknown): HistoryExtractionSeed {
+  if (!value || typeof value !== 'object') {
+    return {}
+  }
+
+  const input = value as {
+    mode?: unknown
+    queries?: unknown
+  }
+  const seed: HistoryExtractionSeed = {}
+
+  if (input.mode === 'javascript' || input.mode === 'jsonpath') {
+    seed.mode = input.mode
+  }
+
+  if (input.queries && typeof input.queries === 'object') {
+    const queries = input.queries as Partial<Record<keyof ExtractionQueries, unknown>>
+    const nextQueries: Partial<ExtractionQueries> = {}
+
+    if (typeof queries.javascript === 'string') {
+      nextQueries.javascript = queries.javascript
+    }
+
+    if (typeof queries.jsonpath === 'string') {
+      nextQueries.jsonpath = queries.jsonpath
+    }
+
+    seed.queries = nextQueries
+  }
+
+  return seed
 }

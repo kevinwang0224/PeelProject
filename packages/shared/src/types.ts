@@ -3,6 +3,18 @@ export type ExtractionMode = "javascript" | "jsonpath";
 export type ExtractionStatus = "idle" | "success" | "empty" | "error";
 export type ResultDisplayStyle = "plainText" | "structuredJson";
 
+export type ExtractionQueries = Record<ExtractionMode, string>;
+
+export interface HistoryExtractionState {
+  mode: ExtractionMode;
+  queries: ExtractionQueries;
+}
+
+export type HistoryExtractionSeed = {
+  mode?: ExtractionMode;
+  queries?: Partial<ExtractionQueries>;
+};
+
 export interface JsonValidationIssue {
   message: string;
   line: number;
@@ -15,6 +27,7 @@ export interface HistoryRecord {
   id: string;
   title: string;
   content: string;
+  extraction: HistoryExtractionState;
   createdAt: string;
   updatedAt: string;
   pinned: boolean;
@@ -35,6 +48,7 @@ export interface AppSnapshot {
 export interface HistoryRecordSeed {
   title?: string;
   content?: string;
+  extraction?: HistoryExtractionSeed;
 }
 
 export interface ExtractionResult {
@@ -50,7 +64,14 @@ export interface ExtractionRequest {
   data: unknown;
 }
 
-export const STORAGE_SCHEMA_VERSION = 1;
+export const STORAGE_SCHEMA_VERSION = 2;
+
+export const DEFAULT_EXTRACTION_MODE: ExtractionMode = "javascript";
+
+export const DEFAULT_EXTRACTION_QUERIES: ExtractionQueries = {
+  javascript: "data",
+  jsonpath: "$",
+};
 
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: "system",

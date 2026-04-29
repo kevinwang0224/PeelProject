@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createHistoryExtractionState,
   createHistoryRecord,
   normalizeTitle,
   sortHistoryRecords,
@@ -20,7 +21,49 @@ describe("history helpers", () => {
     expect(record.id).toBeTruthy();
     expect(record.title).toBeTruthy();
     expect(record.content).toContain("peel");
+    expect(record.extraction).toEqual({
+      mode: "javascript",
+      queries: {
+        javascript: "data",
+        jsonpath: "$",
+      },
+    });
     expect(record.updatedAt).toBe(record.createdAt);
+  });
+
+  it("keeps extraction queries for each language", () => {
+    const record = createHistoryRecord({
+      content: '{"items":[{"id":1}]}',
+      extraction: {
+        mode: "jsonpath",
+        queries: {
+          javascript: "data.items.map((item) => item.id)",
+          jsonpath: "$.items[*].id",
+        },
+      },
+    });
+
+    expect(record.extraction.mode).toBe("jsonpath");
+    expect(record.extraction.queries.javascript).toBe(
+      "data.items.map((item) => item.id)",
+    );
+    expect(record.extraction.queries.jsonpath).toBe("$.items[*].id");
+  });
+
+  it("fills missing extraction query defaults", () => {
+    const extraction = createHistoryExtractionState({
+      queries: {
+        jsonpath: "$.items[*].id",
+      },
+    });
+
+    expect(extraction).toEqual({
+      mode: "javascript",
+      queries: {
+        javascript: "data",
+        jsonpath: "$.items[*].id",
+      },
+    });
   });
 
   it("sorts pinned records first and newer records ahead of older ones", () => {
@@ -28,6 +71,7 @@ describe("history helpers", () => {
       id: "older",
       title: "older",
       content: "{}",
+      extraction: createHistoryExtractionState(),
       createdAt: "2026-04-11T09:00:00.000Z",
       updatedAt: "2026-04-11T09:00:00.000Z",
       pinned: false,
@@ -55,6 +99,12 @@ describe("history helpers", () => {
     const updated = {
       ...base,
       content: '{"updated":true}',
+      extraction: createHistoryExtractionState({
+        mode: "jsonpath",
+        queries: {
+          jsonpath: "$.updated",
+        },
+      }),
       updatedAt: "2026-04-12T12:00:00.000Z",
     };
 
@@ -62,5 +112,7 @@ describe("history helpers", () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]?.content).toContain("updated");
+    expect(result[0]?.extraction.mode).toBe("jsonpath");
+    expect(result[0]?.extraction.queries.jsonpath).toBe("$.updated");
   });
 });
