@@ -22,6 +22,7 @@ const MONACO_REACT_WRAPPER_STYLE: CSSProperties = {
 
 export interface MonacoSurfaceHandle {
   focus: () => void
+  layout: () => void
   cutSelection: () => string
   getTextForCopy: () => string
   pasteText: (text: string) => void
@@ -74,6 +75,9 @@ export function MonacoEditorSurface({
   const stableHandleRef = useRef<MonacoSurfaceHandle>({
     focus: () => {
       editorRef.current?.focus()
+    },
+    layout: () => {
+      editorRef.current?.layout()
     },
     cutSelection: () => {
       const editor = editorRef.current

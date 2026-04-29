@@ -120,6 +120,7 @@ export default function App(): React.JSX.Element {
   const [extractionResult, setExtractionResult] = useState<ExtractionResult>(idleExtractionResult)
   const [errorRevealToken, setErrorRevealToken] = useState(0)
   const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>('light')
+  const [mainContentHeight, setMainContentHeight] = useState(0)
 
   const deferredSearch = useDeferredValue(searchText)
   const rawEditorHandleRef = useRef<MonacoSurfaceHandle | null>(null)
@@ -138,6 +139,26 @@ export default function App(): React.JSX.Element {
       activeEditorHandleRef.current = rawEditorHandleRef.current
     }, 0)
   }, [])
+  const layoutEditorsSoon = useCallback(() => {
+    let firstFrame = 0
+    let secondFrame = 0
+
+    const layoutEditors = (): void => {
+      rawEditorHandleRef.current?.layout()
+      expressionEditorHandleRef.current?.layout()
+      resultEditorHandleRef.current?.layout()
+    }
+
+    firstFrame = window.requestAnimationFrame(() => {
+      layoutEditors()
+      secondFrame = window.requestAnimationFrame(layoutEditors)
+    })
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame)
+      window.cancelAnimationFrame(secondFrame)
+    }
+  }, [])
 
   const records = snapshot?.history ?? EMPTY_HISTORY
   const settings = snapshot?.settings ?? DEFAULT_SETTINGS
@@ -150,6 +171,26 @@ export default function App(): React.JSX.Element {
   const visibleExtractionResult = extractionQuery.trim().length
     ? extractionResult
     : idleExtractionResult
+  const mainGridTemplateRows = useMemo(() => {
+    if (expressionCollapsed) {
+      return 'minmax(160px, 1fr) 32px 36px'
+    }
+
+    if (!mainContentHeight) {
+      return `minmax(160px, ${topPanelRatio}fr) 5px minmax(120px, ${1 - topPanelRatio}fr) 36px`
+    }
+
+    const fixedRowsHeight = 5 + 36
+    const adjustableHeight = Math.max(1, mainContentHeight - fixedRowsHeight)
+    const minTopHeight = 160
+    const minBottomHeight = 120
+    const maxTopHeight = Math.max(minTopHeight, adjustableHeight - minBottomHeight)
+    const topPanelHeight = Math.round(
+      Math.max(minTopHeight, Math.min(maxTopHeight, adjustableHeight * topPanelRatio))
+    )
+
+    return `${topPanelHeight}px 5px minmax(${minBottomHeight}px, 1fr) 36px`
+  }, [expressionCollapsed, mainContentHeight, topPanelRatio])
 
   const filteredRecords = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase()
@@ -185,25 +226,70 @@ export default function App(): React.JSX.Element {
   }, [resolvedTheme])
 
   useEffect(() => {
+    if (!snapshot) {
+      return
+    }
+
+    const container = mainContentRef.current
+
+    if (!container) {
+      return
+    }
+
+    const syncMainContentHeight = (): void => {
+      setMainContentHeight(container.getBoundingClientRect().height)
+    }
+
+    syncMainContentHeight()
+
+    const observer = new ResizeObserver(() => {
+      syncMainContentHeight()
+      layoutEditorsSoon()
+    })
+
+    observer.observe(container)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [layoutEditorsSoon, snapshot])
+
+  useEffect(() => {
+    if (!snapshot) {
+      return
+    }
+
+    return layoutEditorsSoon()
+  }, [
+    expressionCollapsed,
+    layoutEditorsSoon,
+    mainContentHeight,
+    resultCollapsed,
+    resultVisible,
+    sidebarCollapsed,
+    snapshot,
+    splitRatio,
+    topPanelRatio
+  ])
+
+  useEffect(() => {
     if (!snapshot || rendererReadyNotifiedRef.current) {
       return
     }
 
-    let firstFrame = 0
-    let secondFrame = 0
+    const cancelEditorLayout = layoutEditorsSoon()
+    let rendererReadyFrame = 0
 
-    firstFrame = window.requestAnimationFrame(() => {
-      secondFrame = window.requestAnimationFrame(() => {
-        rendererReadyNotifiedRef.current = true
-        window.peel.rendererReady()
-      })
+    rendererReadyFrame = window.requestAnimationFrame(() => {
+      rendererReadyNotifiedRef.current = true
+      window.peel.rendererReady()
     })
 
     return () => {
-      window.cancelAnimationFrame(firstFrame)
-      window.cancelAnimationFrame(secondFrame)
+      cancelEditorLayout()
+      window.cancelAnimationFrame(rendererReadyFrame)
     }
-  }, [snapshot])
+  }, [layoutEditorsSoon, snapshot])
 
   useEffect(() => {
     let mounted = true
@@ -869,10 +955,7 @@ export default function App(): React.JSX.Element {
             className="grid h-full min-h-0 gap-px overflow-hidden bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]"
             style={{
               gridColumn: sidebarCollapsed ? '1 / -1' : undefined,
-              height: 'calc(100vh - 36px)',
-              gridTemplateRows: expressionCollapsed
-                ? 'minmax(160px, 1fr) 32px 36px'
-                : `minmax(160px, ${topPanelRatio}fr) 5px minmax(120px, ${1 - topPanelRatio}fr) 36px`
+              gridTemplateRows: mainGridTemplateRows
             }}
           >
             {/* Top row: JSON (left) + drag handle + Result (right) */}
