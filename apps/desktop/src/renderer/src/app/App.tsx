@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Braces,
+  Check,
   ChevronDown,
   Copy,
   FolderOpen,
@@ -36,10 +37,14 @@ import { toast, Toaster } from 'sonner'
 
 import { createDefaultTitle } from '@peel/shared/history'
 import {
+  DEFAULT_EXTRACTION_MODE,
+  DEFAULT_EXTRACTION_QUERIES,
   DEFAULT_SETTINGS,
   type AppSnapshot,
+  type ExtractionQueries,
   type ExtractionMode,
   type ExtractionResult,
+  type HistoryExtractionState,
   type HistoryRecord,
   type MenuAction
 } from '@desktop/shared/peel'
@@ -95,6 +100,35 @@ const idleExtractionResult: ExtractionResult = {
 
 const EMPTY_HISTORY: HistoryRecord[] = []
 
+function createDefaultExtractionQueries(
+  queries: Partial<ExtractionQueries> = {}
+): ExtractionQueries {
+  return {
+    ...DEFAULT_EXTRACTION_QUERIES,
+    ...queries
+  }
+}
+
+function createDefaultExtractionState(
+  extraction?: HistoryExtractionState
+): HistoryExtractionState {
+  return {
+    mode: extraction?.mode ?? DEFAULT_EXTRACTION_MODE,
+    queries: createDefaultExtractionQueries(extraction?.queries)
+  }
+}
+
+function areExtractionStatesEqual(
+  left: HistoryExtractionState,
+  right: HistoryExtractionState
+): boolean {
+  return (
+    left.mode === right.mode &&
+    left.queries.javascript === right.queries.javascript &&
+    left.queries.jsonpath === right.queries.jsonpath
+  )
+}
+
 export default function App(): React.JSX.Element {
   const [snapshot, setSnapshot] = useState<AppSnapshot | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -115,8 +149,10 @@ export default function App(): React.JSX.Element {
   const [topPanelRatio, setTopPanelRatio] = useState(0.86)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
-  const [extractionMode, setExtractionMode] = useState<ExtractionMode>('javascript')
-  const [extractionQuery, setExtractionQuery] = useState('data')
+  const [extractionMode, setExtractionMode] = useState<ExtractionMode>(DEFAULT_EXTRACTION_MODE)
+  const [extractionQueries, setExtractionQueries] = useState<ExtractionQueries>(() =>
+    createDefaultExtractionQueries()
+  )
   const [extractionResult, setExtractionResult] = useState<ExtractionResult>(idleExtractionResult)
   const [errorRevealToken, setErrorRevealToken] = useState(0)
   const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>('light')
@@ -132,7 +168,9 @@ export default function App(): React.JSX.Element {
   const rendererReadyNotifiedRef = useRef(false)
   const [newMenuOpen, setNewMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const newMenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [actionFeedback, setActionFeedback] = useState<Record<string, boolean>>({})
+  const newMenuTimerRef = useRef<number | null>(null)
+  const actionFeedbackTimersRef = useRef<Record<string, number>>({})
   const focusRawEditorSoon = useCallback(() => {
     window.setTimeout(() => {
       rawEditorHandleRef.current?.focus()
@@ -159,10 +197,30 @@ export default function App(): React.JSX.Element {
       window.cancelAnimationFrame(secondFrame)
     }
   }, [])
+  const flashActionFeedback = useCallback((action: string): void => {
+    const existingTimer = actionFeedbackTimersRef.current[action]
+    if (existingTimer) {
+      window.clearTimeout(existingTimer)
+    }
+
+    setActionFeedback((prev) => ({
+      ...prev,
+      [action]: true
+    }))
+
+    actionFeedbackTimersRef.current[action] = window.setTimeout(() => {
+      setActionFeedback((prev) => ({
+        ...prev,
+        [action]: false
+      }))
+      delete actionFeedbackTimersRef.current[action]
+    }, 1000)
+  }, [])
 
   const records = snapshot?.history ?? EMPTY_HISTORY
   const settings = snapshot?.settings ?? DEFAULT_SETTINGS
   const selectedRecord = records.find((record) => record.id === selectedId) ?? null
+  const extractionQuery = extractionQueries[extractionMode]
   const titleForWidth = isEditingTitle ? titleDraft : (selectedRecord?.title ?? 'Untitled')
   const titleWidthCh = Math.min(Math.max(titleForWidth.length, 12), 28)
   const summary = summarizeJson(editorText)
@@ -255,6 +313,14 @@ export default function App(): React.JSX.Element {
   }, [layoutEditorsSoon, snapshot])
 
   useEffect(() => {
+    return () => {
+      for (const timer of Object.values(actionFeedbackTimersRef.current)) {
+        window.clearTimeout(timer)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     if (!snapshot) {
       return
     }
@@ -300,11 +366,14 @@ export default function App(): React.JSX.Element {
       }
 
       const initialRecord = nextSnapshot.history[0] ?? null
+      const initialExtraction = createDefaultExtractionState(initialRecord?.extraction)
 
       startTransition(() => {
         setSnapshot(nextSnapshot)
         setSelectedId(initialRecord?.id ?? null)
         setEditorText(initialRecord?.content ?? '')
+        setExtractionMode(initialExtraction.mode)
+        setExtractionQueries(initialExtraction.queries)
       })
     })
 
@@ -324,6 +393,11 @@ export default function App(): React.JSX.Element {
       return null
     }
 
+    const nextExtraction = createDefaultExtractionState({
+      mode: extractionMode,
+      queries: extractionQueries
+    })
+
     if (!selectedId && !editorText.trim().length) {
       return snapshot
     }
@@ -331,7 +405,8 @@ export default function App(): React.JSX.Element {
     if (!selectedId) {
       const created = await window.peel.history.create({
         title: createDefaultTitle(),
-        content: editorText
+        content: editorText,
+        extraction: nextExtraction
       })
 
       applySnapshot(created.snapshot)
@@ -345,18 +420,28 @@ export default function App(): React.JSX.Element {
 
     const currentRecord = snapshot.history.find((record) => record.id === selectedId)
 
-    if (!currentRecord || currentRecord.content === editorText) {
+    if (!currentRecord) {
+      return snapshot
+    }
+
+    const currentExtraction = createDefaultExtractionState(currentRecord.extraction)
+
+    if (
+      currentRecord.content === editorText &&
+      areExtractionStatesEqual(currentExtraction, nextExtraction)
+    ) {
       return snapshot
     }
 
     const nextSnapshot = await window.peel.history.save({
       ...currentRecord,
-      content: editorText
+      content: editorText,
+      extraction: nextExtraction
     })
 
     applySnapshot(nextSnapshot)
     return nextSnapshot
-  }, [applySnapshot, editorText, selectedId, snapshot])
+  }, [applySnapshot, editorText, extractionMode, extractionQueries, selectedId, snapshot])
 
   useEffect(() => {
     if (!snapshot) {
@@ -367,10 +452,21 @@ export default function App(): React.JSX.Element {
       return
     }
 
+    const nextExtraction = createDefaultExtractionState({
+      mode: extractionMode,
+      queries: extractionQueries
+    })
+
     if (selectedId) {
       const currentRecord = snapshot.history.find((record) => record.id === selectedId)
 
-      if (currentRecord?.content === editorText) {
+      if (
+        currentRecord?.content === editorText &&
+        areExtractionStatesEqual(
+          createDefaultExtractionState(currentRecord.extraction),
+          nextExtraction
+        )
+      ) {
         return
       }
     }
@@ -382,7 +478,7 @@ export default function App(): React.JSX.Element {
     return () => {
       window.clearTimeout(timer)
     }
-  }, [editorText, persistCurrentEditor, selectedId, snapshot])
+  }, [editorText, extractionMode, extractionQueries, persistCurrentEditor, selectedId, snapshot])
 
   const openResult = useCallback(() => {
     setResultVisible(true)
@@ -530,13 +626,16 @@ export default function App(): React.JSX.Element {
 
   const handleExtractionQueryChange = useCallback(
     (value: string): void => {
-      setExtractionQuery(value)
+      setExtractionQueries((queries) => ({
+        ...queries,
+        [extractionMode]: value
+      }))
       if (!value.trim().length) {
         setExtractionResult(idleExtractionResult)
       }
       openResult()
     },
-    [openResult]
+    [extractionMode, openResult]
   )
 
   const handleCreateRecord = useCallback(
@@ -548,9 +647,12 @@ export default function App(): React.JSX.Element {
       })
 
       applySnapshot(created.snapshot)
+      const nextExtraction = createDefaultExtractionState(created.record.extraction)
       startTransition(() => {
         setSelectedId(created.record.id)
         setEditorText(created.record.content)
+        setExtractionMode(nextExtraction.mode)
+        setExtractionQueries(nextExtraction.queries)
         setExtractionResult(idleExtractionResult)
       })
 
@@ -573,9 +675,13 @@ export default function App(): React.JSX.Element {
     })
 
     applySnapshot(created.snapshot)
+    const nextExtraction = createDefaultExtractionState(created.record.extraction)
     startTransition(() => {
       setSelectedId(created.record.id)
       setEditorText(created.record.content)
+      setExtractionMode(nextExtraction.mode)
+      setExtractionQueries(nextExtraction.queries)
+      setExtractionResult(idleExtractionResult)
     })
 
     toast.success('Opened as a new record.')
@@ -605,10 +711,13 @@ export default function App(): React.JSX.Element {
 
       const nextSnapshot = (await persistCurrentEditor()) ?? snapshot
       const nextRecord = nextSnapshot?.history.find((item) => item.id === record.id) ?? record
+      const nextExtraction = createDefaultExtractionState(nextRecord.extraction)
 
       startTransition(() => {
         setSelectedId(nextRecord.id)
         setEditorText(nextRecord.content)
+        setExtractionMode(nextExtraction.mode)
+        setExtractionQueries(nextExtraction.queries)
         setExtractionResult(idleExtractionResult)
       })
     },
@@ -621,10 +730,14 @@ export default function App(): React.JSX.Element {
       applySnapshot(nextSnapshot)
 
       const fallback = nextSnapshot.history[0] ?? null
+      const fallbackExtraction = createDefaultExtractionState(fallback?.extraction)
       startTransition(() => {
         if (record.id === selectedId) {
           setSelectedId(fallback?.id ?? null)
           setEditorText(fallback?.content ?? '')
+          setExtractionMode(fallbackExtraction.mode)
+          setExtractionQueries(fallbackExtraction.queries)
+          setExtractionResult(idleExtractionResult)
         }
       })
 
@@ -663,15 +776,15 @@ export default function App(): React.JSX.Element {
       }
 
       setEditorText(result.output)
-      toast.success(style === 'pretty' ? 'JSON formatted.' : 'JSON compacted.')
+      flashActionFeedback(style === 'pretty' ? 'format' : 'compact')
     },
-    [editorText]
+    [editorText, flashActionFeedback]
   )
 
   const handleCopyCurrent = useCallback(async (): Promise<void> => {
     await window.peel.clipboard.writeText(editorText)
-    toast.success('Copied.')
-  }, [editorText])
+    flashActionFeedback('copy')
+  }, [editorText, flashActionFeedback])
 
   const handleCopyExtraction = useCallback(async (): Promise<void> => {
     if (visibleExtractionResult.status !== 'success') {
@@ -679,8 +792,8 @@ export default function App(): React.JSX.Element {
     }
 
     await window.peel.clipboard.writeText(visibleExtractionResult.text)
-    toast.success('Result copied.')
-  }, [visibleExtractionResult])
+    flashActionFeedback('result-copy')
+  }, [flashActionFeedback, visibleExtractionResult])
 
   const handleFormatResult = useCallback(
     (style: 'pretty' | 'compact'): void => {
@@ -688,8 +801,9 @@ export default function App(): React.JSX.Element {
       const result = formatJson(extractionResult.text, style)
       if (!result.ok) return
       setExtractionResult((prev) => ({ ...prev, text: result.output }))
+      flashActionFeedback(style === 'pretty' ? 'result-format' : 'result-compact')
     },
-    [extractionResult]
+    [extractionResult, flashActionFeedback]
   )
 
   const persistSettings = useCallback(
@@ -775,11 +889,11 @@ export default function App(): React.JSX.Element {
             <div
               className="relative"
               onMouseEnter={() => {
-                if (newMenuTimerRef.current) clearTimeout(newMenuTimerRef.current)
+                if (newMenuTimerRef.current) window.clearTimeout(newMenuTimerRef.current)
                 setNewMenuOpen(true)
               }}
               onMouseLeave={() => {
-                newMenuTimerRef.current = setTimeout(() => setNewMenuOpen(false), 120)
+                newMenuTimerRef.current = window.setTimeout(() => setNewMenuOpen(false), 120)
               }}
             >
               <button
@@ -983,7 +1097,22 @@ export default function App(): React.JSX.Element {
                       title="Format (Shift+Alt+F)"
                       onClick={() => handleFormat('pretty')}
                     >
-                      <Braces className="size-3.5" />
+                      <AnimatePresence mode="wait" initial={false}>
+                        <motion.span
+                          key={actionFeedback.format ? 'format-ok' : 'format-default'}
+                          initial={{ opacity: 0, scale: 0.75, y: 2 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.75, y: -2 }}
+                          transition={{ duration: 0.16, ease: 'easeOut' }}
+                          className="inline-flex"
+                        >
+                          {actionFeedback.format ? (
+                            <Check className="size-3.5" />
+                          ) : (
+                            <Braces className="size-3.5" />
+                          )}
+                        </motion.span>
+                      </AnimatePresence>
                       Format
                     </Button>
                     <Button
@@ -992,11 +1121,41 @@ export default function App(): React.JSX.Element {
                       title="Compact (Shift+Alt+M)"
                       onClick={() => handleFormat('compact')}
                     >
-                      <Minimize2 className="size-3.5" />
+                      <AnimatePresence mode="wait" initial={false}>
+                        <motion.span
+                          key={actionFeedback.compact ? 'compact-ok' : 'compact-default'}
+                          initial={{ opacity: 0, scale: 0.75, y: 2 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.75, y: -2 }}
+                          transition={{ duration: 0.16, ease: 'easeOut' }}
+                          className="inline-flex"
+                        >
+                          {actionFeedback.compact ? (
+                            <Check className="size-3.5" />
+                          ) : (
+                            <Minimize2 className="size-3.5" />
+                          )}
+                        </motion.span>
+                      </AnimatePresence>
                       Compact
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => void handleCopyCurrent()}>
-                      <Copy className="size-3.5" />
+                      <AnimatePresence mode="wait" initial={false}>
+                        <motion.span
+                          key={actionFeedback.copy ? 'copy-ok' : 'copy-default'}
+                          initial={{ opacity: 0, scale: 0.75, y: 2 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.75, y: -2 }}
+                          transition={{ duration: 0.16, ease: 'easeOut' }}
+                          className="inline-flex"
+                        >
+                          {actionFeedback.copy ? (
+                            <Check className="size-3.5" />
+                          ) : (
+                            <Copy className="size-3.5" />
+                          )}
+                        </motion.span>
+                      </AnimatePresence>
                       Copy
                     </Button>
                   </div>
@@ -1067,7 +1226,22 @@ export default function App(): React.JSX.Element {
                         disabled={visibleExtractionResult.displayStyle !== 'structuredJson'}
                         onClick={() => handleFormatResult('pretty')}
                       >
-                        <Braces className="size-3.5" />
+                        <AnimatePresence mode="wait" initial={false}>
+                          <motion.span
+                            key={actionFeedback['result-format'] ? 'result-format-ok' : 'result-format-default'}
+                            initial={{ opacity: 0, scale: 0.75, y: 2 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.75, y: -2 }}
+                            transition={{ duration: 0.16, ease: 'easeOut' }}
+                            className="inline-flex"
+                          >
+                            {actionFeedback['result-format'] ? (
+                              <Check className="size-3.5" />
+                            ) : (
+                              <Braces className="size-3.5" />
+                            )}
+                          </motion.span>
+                        </AnimatePresence>
                         Format
                       </Button>
                       <Button
@@ -1076,7 +1250,26 @@ export default function App(): React.JSX.Element {
                         disabled={visibleExtractionResult.displayStyle !== 'structuredJson'}
                         onClick={() => handleFormatResult('compact')}
                       >
-                        <Minimize2 className="size-3.5" />
+                        <AnimatePresence mode="wait" initial={false}>
+                          <motion.span
+                            key={
+                              actionFeedback['result-compact']
+                                ? 'result-compact-ok'
+                                : 'result-compact-default'
+                            }
+                            initial={{ opacity: 0, scale: 0.75, y: 2 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.75, y: -2 }}
+                            transition={{ duration: 0.16, ease: 'easeOut' }}
+                            className="inline-flex"
+                          >
+                            {actionFeedback['result-compact'] ? (
+                              <Check className="size-3.5" />
+                            ) : (
+                              <Minimize2 className="size-3.5" />
+                            )}
+                          </motion.span>
+                        </AnimatePresence>
                         Compact
                       </Button>
                       <Button
@@ -1085,7 +1278,22 @@ export default function App(): React.JSX.Element {
                         disabled={visibleExtractionResult.status !== 'success'}
                         onClick={() => void handleCopyExtraction()}
                       >
-                        <Copy className="size-3.5" />
+                        <AnimatePresence mode="wait" initial={false}>
+                          <motion.span
+                            key={actionFeedback['result-copy'] ? 'result-copy-ok' : 'result-copy-default'}
+                            initial={{ opacity: 0, scale: 0.75, y: 2 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.75, y: -2 }}
+                            transition={{ duration: 0.16, ease: 'easeOut' }}
+                            className="inline-flex"
+                          >
+                            {actionFeedback['result-copy'] ? (
+                              <Check className="size-3.5" />
+                            ) : (
+                              <Copy className="size-3.5" />
+                            )}
+                          </motion.span>
+                        </AnimatePresence>
                         Copy
                       </Button>
                       <Button
@@ -1175,7 +1383,15 @@ export default function App(): React.JSX.Element {
                   </header>
                   <div className="min-h-0 h-full overflow-hidden">
                     <MonacoEditorSurface
-                      path="peel://expression.ts"
+                      path={
+                        selectedId
+                          ? `peel://record-${selectedId}-expression-${extractionMode}.${
+                              extractionMode === 'javascript' ? 'js' : 'txt'
+                            }`
+                          : `peel://new-expression-${extractionMode}.${
+                              extractionMode === 'javascript' ? 'js' : 'txt'
+                            }`
+                      }
                       theme={monacoTheme}
                       language={extractionMode === 'javascript' ? 'javascript' : 'plaintext'}
                       fontSize={settings.editorFontSize}
