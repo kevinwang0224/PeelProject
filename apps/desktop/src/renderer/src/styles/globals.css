@@ -266,10 +266,4 @@ select {
   }
 }
 
-.monaco-editor,
-.monaco-editor-background,
-.monaco-editor .margin {
-  background: transparent !important;
-}
-
 /* 不要改 .view-lines / .view-line 的字体、行高、::selection：会与 Monaco 内部度量不一致，选区高亮会“飘” */

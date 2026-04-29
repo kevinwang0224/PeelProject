@@ -53,7 +53,7 @@ export function configureMonaco(): void {
       { token: 'keyword', foreground: '9b2393', fontStyle: 'bold' }
     ],
     colors: {
-      'editor.background': '#00000000',
+      'editor.background': '#ffffff',
       'editor.lineHighlightBackground': '#00000000',
       'editorLineNumber.foreground': '#aeaeb2',
       'editorLineNumber.activeForeground': '#636366',
@@ -80,7 +80,7 @@ export function configureMonaco(): void {
       { token: 'keyword', foreground: 'fc5fa3', fontStyle: 'bold' }
     ],
     colors: {
-      'editor.background': '#00000000',
+      'editor.background': '#1c1c1e',
       'editor.lineHighlightBackground': '#ffffff06',
       'editorLineNumber.foreground': '#636366',
       'editorLineNumber.activeForeground': '#aeaeb2',
