@@ -70,7 +70,13 @@ export interface PeelAPI {
     readText: () => Promise<string>
     writeText: (text: string) => Promise<void>
   }
+  temp: {
+    getInitialContent: () => Promise<string>
+    setDirty: (dirty: boolean) => void
+    commit: (seed: HistoryRecordSeed) => Promise<void>
+  }
   menu: {
     onAction: (listener: (action: MenuAction) => void) => () => void
   }
+  onSnapshotUpdated: (listener: (snapshot: AppSnapshot) => void) => () => void
 }

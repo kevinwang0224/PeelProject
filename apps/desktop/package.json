@@ -1,6 +1,6 @@
 {
   "name": "@peel/desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Peel desktop JSON workspace built with Electron, React, Tailwind CSS, shadcn/ui, and Monaco.",
   "main": "./out/main/index.js",
   "author": "Kevin",

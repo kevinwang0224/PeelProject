@@ -48,7 +48,13 @@ import {
   type HistoryRecord,
   type MenuAction
 } from '@desktop/shared/peel'
-import { formatJson, formatPastedJson, summarizeJson, tryParseJson } from '@peel/shared/json'
+import {
+  formatJson,
+  formatJsonInput,
+  formatPastedJson,
+  summarizeJson,
+  tryParseJson
+} from '@peel/shared/json'
 import {
   MonacoEditorSurface,
   type MonacoSurfaceHandle
@@ -100,6 +106,9 @@ const idleExtractionResult: ExtractionResult = {
 
 const EMPTY_HISTORY: HistoryRecord[] = []
 
+/** macOS 使用 hiddenInset 标题栏，临时窗口需为左上角红绿灯按钮预留空间 */
+const IS_MAC = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('mac')
+
 function createDefaultExtractionQueries(
   queries: Partial<ExtractionQueries> = {}
 ): ExtractionQueries {
@@ -109,9 +118,7 @@ function createDefaultExtractionQueries(
   }
 }
 
-function createDefaultExtractionState(
-  extraction?: HistoryExtractionState
-): HistoryExtractionState {
+function createDefaultExtractionState(extraction?: HistoryExtractionState): HistoryExtractionState {
   return {
     mode: extraction?.mode ?? DEFAULT_EXTRACTION_MODE,
     queries: createDefaultExtractionQueries(extraction?.queries)
@@ -129,7 +136,12 @@ function areExtractionStatesEqual(
   )
 }
 
-export default function App(): React.JSX.Element {
+interface AppProps {
+  mode?: 'main' | 'temporary'
+}
+
+export default function App({ mode = 'main' }: AppProps): React.JSX.Element {
+  const isTemporary = mode === 'temporary'
   const [snapshot, setSnapshot] = useState<AppSnapshot | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editorText, setEditorText] = useState('')
@@ -166,6 +178,7 @@ export default function App(): React.JSX.Element {
   const mainContentRef = useRef<HTMLDivElement>(null)
   const splitContainerRef = useRef<HTMLDivElement>(null)
   const rendererReadyNotifiedRef = useRef(false)
+  const tempInitialContentRef = useRef('')
   const [newMenuOpen, setNewMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [actionFeedback, setActionFeedback] = useState<Record<string, boolean>>({})
@@ -360,8 +373,27 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     let mounted = true
 
-    void window.peel.bootstrap().then((nextSnapshot) => {
+    void window.peel.bootstrap().then(async (nextSnapshot) => {
       if (!mounted) {
+        return
+      }
+
+      if (isTemporary) {
+        const rawInitial = await window.peel.temp.getInitialContent()
+        if (!mounted) {
+          return
+        }
+
+        const initialContent = formatPastedJson(rawInitial)
+        tempInitialContentRef.current = initialContent
+
+        startTransition(() => {
+          setSnapshot(nextSnapshot)
+          setSelectedId(null)
+          setEditorText(initialContent)
+          setExtractionMode(DEFAULT_EXTRACTION_MODE)
+          setExtractionQueries(createDefaultExtractionQueries())
+        })
         return
       }
 
@@ -380,7 +412,7 @@ export default function App(): React.JSX.Element {
     return () => {
       mounted = false
     }
-  }, [])
+  }, [isTemporary])
 
   const applySnapshot = useCallback((nextSnapshot: AppSnapshot): void => {
     startTransition(() => {
@@ -391,6 +423,10 @@ export default function App(): React.JSX.Element {
   const persistCurrentEditor = useCallback(async (): Promise<AppSnapshot | null> => {
     if (!snapshot) {
       return null
+    }
+
+    if (isTemporary) {
+      return snapshot
     }
 
     const nextExtraction = createDefaultExtractionState({
@@ -441,10 +477,18 @@ export default function App(): React.JSX.Element {
 
     applySnapshot(nextSnapshot)
     return nextSnapshot
-  }, [applySnapshot, editorText, extractionMode, extractionQueries, selectedId, snapshot])
+  }, [
+    applySnapshot,
+    editorText,
+    extractionMode,
+    extractionQueries,
+    isTemporary,
+    selectedId,
+    snapshot
+  ])
 
   useEffect(() => {
-    if (!snapshot) {
+    if (!snapshot || isTemporary) {
       return
     }
 
@@ -478,7 +522,41 @@ export default function App(): React.JSX.Element {
     return () => {
       window.clearTimeout(timer)
     }
-  }, [editorText, extractionMode, extractionQueries, persistCurrentEditor, selectedId, snapshot])
+  }, [
+    editorText,
+    extractionMode,
+    extractionQueries,
+    isTemporary,
+    persistCurrentEditor,
+    selectedId,
+    snapshot
+  ])
+
+  useEffect(() => {
+    if (!isTemporary) {
+      return
+    }
+
+    window.peel.temp.setDirty(editorText !== tempInitialContentRef.current)
+  }, [editorText, isTemporary])
+
+  const handleTempSave = useCallback(async (): Promise<void> => {
+    const extraction = createDefaultExtractionState({
+      mode: extractionMode,
+      queries: extractionQueries
+    })
+
+    window.peel.temp.setDirty(false)
+    await window.peel.temp.commit({
+      title: createDefaultTitle(),
+      content: editorText,
+      extraction
+    })
+  }, [editorText, extractionMode, extractionQueries])
+
+  const handleTempDiscard = useCallback((): void => {
+    window.close()
+  }, [])
 
   const openResult = useCallback(() => {
     setResultVisible(true)
@@ -767,7 +845,7 @@ export default function App(): React.JSX.Element {
 
   const handleFormat = useCallback(
     (style: 'pretty' | 'compact'): void => {
-      const result = formatJson(editorText, style)
+      const result = formatJsonInput(editorText, style)
 
       if (!result.ok) {
         setErrorRevealToken((value) => value + 1)
@@ -818,14 +896,17 @@ export default function App(): React.JSX.Element {
     async (action: MenuAction): Promise<void> => {
       switch (action) {
         case 'new-json':
+          if (isTemporary) break
           await handleCreateRecord('')
           break
         case 'new-json-from-clipboard': {
+          if (isTemporary) break
           const clipboardText = await window.peel.clipboard.readText()
           await handleCreateRecord(formatPastedJson(clipboardText))
           break
         }
         case 'open-json':
+          if (isTemporary) break
           await handleOpenJson()
           break
         case 'export-json':
@@ -842,7 +923,7 @@ export default function App(): React.JSX.Element {
           break
       }
     },
-    [handleCreateRecord, handleExportJson, handleFormat, handleOpenJson]
+    [handleCreateRecord, handleExportJson, handleFormat, handleOpenJson, isTemporary]
   )
 
   useEffect(() => {
@@ -850,6 +931,16 @@ export default function App(): React.JSX.Element {
       void handleMenuAction(action)
     })
   }, [handleMenuAction])
+
+  useEffect(() => {
+    if (isTemporary) {
+      return
+    }
+
+    return window.peel.onSnapshotUpdated((nextSnapshot) => {
+      applySnapshot(nextSnapshot)
+    })
+  }, [applySnapshot, isTemporary])
 
   if (!snapshot) {
     return <LoadingSplash />
@@ -863,159 +954,203 @@ export default function App(): React.JSX.Element {
         <div
           className="grid h-full min-h-0 grid-rows-[36px_minmax(0,1fr)] gap-x-px overflow-hidden [will-change:grid-template-columns]"
           style={{
-            gridTemplateColumns: sidebarCollapsed ? '160px minmax(0,1fr)' : '260px minmax(0,1fr)',
+            gridTemplateColumns: isTemporary
+              ? 'minmax(0,1fr)'
+              : sidebarCollapsed
+                ? '160px minmax(0,1fr)'
+                : '260px minmax(0,1fr)',
             transition: 'grid-template-columns 320ms cubic-bezier(0.32, 0.72, 0, 1)'
           }}
         >
           {/* ── Row 1, Col 1: Sidebar header (sibling of main header → same row height) ── */}
-          <div
-            className="peel-window-drag flex h-9 items-center gap-0.5 border-b border-r border-[var(--border)] bg-[var(--panel)]"
-            style={{
-              paddingLeft: sidebarCollapsed ? 88 : undefined,
-              paddingRight: sidebarCollapsed ? 8 : 8,
-              justifyContent: sidebarCollapsed ? 'flex-start' : 'flex-end'
-            }}
-          >
-            {/* Toggle: collapse ↔ expand */}
-            <button
-              onClick={() => setSidebarCollapsed((v) => !v)}
-              title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
-              className="flex size-7 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--foreground)_5%,transparent)] hover:text-[var(--foreground)]"
-            >
-              {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-            </button>
-
-            {/* + button with hover dropdown */}
+          {!isTemporary && (
             <div
-              className="relative"
-              onMouseEnter={() => {
-                if (newMenuTimerRef.current) window.clearTimeout(newMenuTimerRef.current)
-                setNewMenuOpen(true)
-              }}
-              onMouseLeave={() => {
-                newMenuTimerRef.current = window.setTimeout(() => setNewMenuOpen(false), 120)
+              className="peel-window-drag flex h-9 items-center gap-0.5 border-b border-r border-[var(--border)] bg-[var(--panel)]"
+              style={{
+                paddingLeft: sidebarCollapsed ? 88 : undefined,
+                paddingRight: sidebarCollapsed ? 8 : 8,
+                justifyContent: sidebarCollapsed ? 'flex-start' : 'flex-end'
               }}
             >
+              {/* Toggle: collapse ↔ expand */}
               <button
-                onClick={() => void handleCreateRecord('')}
-                className="flex size-7 items-center justify-center gap-0.5 rounded-md pl-0.5 pr-1 text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--foreground)_5%,transparent)] hover:text-[var(--foreground)]"
+                onClick={() => setSidebarCollapsed((v) => !v)}
+                title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+                className="flex size-7 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--foreground)_5%,transparent)] hover:text-[var(--foreground)]"
               >
-                <Plus size={18} />
-                <ChevronDown size={10} className="opacity-50" />
+                {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
               </button>
 
-              <AnimatePresence>
-                {newMenuOpen && (
-                  <motion.div
-                    className="peel-window-no-drag absolute left-0 top-full z-50 mt-1 min-w-[148px] overflow-hidden rounded-md border border-[var(--border)] bg-[var(--panel)] py-1 shadow-lg"
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -4 }}
-                    transition={{ duration: 0.1 }}
-                  >
-                    <button
-                      className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-[var(--foreground)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]"
-                      onClick={() => {
-                        setNewMenuOpen(false)
-                        void handleCreateRecord('')
-                      }}
+              {/* + button with hover dropdown */}
+              <div
+                className="relative"
+                onMouseEnter={() => {
+                  if (newMenuTimerRef.current) window.clearTimeout(newMenuTimerRef.current)
+                  setNewMenuOpen(true)
+                }}
+                onMouseLeave={() => {
+                  newMenuTimerRef.current = window.setTimeout(() => setNewMenuOpen(false), 120)
+                }}
+              >
+                <button
+                  onClick={() => void handleCreateRecord('')}
+                  className="flex size-7 items-center justify-center gap-0.5 rounded-md pl-0.5 pr-1 text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--foreground)_5%,transparent)] hover:text-[var(--foreground)]"
+                >
+                  <Plus size={18} />
+                  <ChevronDown size={10} className="opacity-50" />
+                </button>
+
+                <AnimatePresence>
+                  {newMenuOpen && (
+                    <motion.div
+                      className="peel-window-no-drag absolute left-0 top-full z-50 mt-1 min-w-[148px] overflow-hidden rounded-md border border-[var(--border)] bg-[var(--panel)] py-1 shadow-lg"
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.1 }}
                     >
-                      <Plus className="size-3.5 text-[var(--muted)]" />
-                      New JSON
-                    </button>
-                    <button
-                      className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-[var(--foreground)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]"
-                      onClick={() => {
-                        setNewMenuOpen(false)
-                        void handleOpenJson()
-                      }}
-                    >
-                      <FolderOpen className="size-3.5 text-[var(--muted)]" />
-                      Open File
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                      <button
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-[var(--foreground)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]"
+                        onClick={() => {
+                          setNewMenuOpen(false)
+                          void handleCreateRecord('')
+                        }}
+                      >
+                        <Plus className="size-3.5 text-[var(--muted)]" />
+                        New JSON
+                      </button>
+                      <button
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-[var(--foreground)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]"
+                        onClick={() => {
+                          setNewMenuOpen(false)
+                          void handleOpenJson()
+                        }}
+                      >
+                        <FolderOpen className="size-3.5 text-[var(--muted)]" />
+                        Open File
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* ── Row 1, Col 2: Main header / title toolbar ── */}
-          <header className="peel-window-drag flex h-9 shrink-0 items-center border-b border-[var(--border)] bg-[var(--panel)] px-4">
-            <div
-              className="peel-doc-title-shell cursor-text"
-              style={{ width: `${titleWidthCh}ch`, maxWidth: '280px' }}
-              role={isEditingTitle ? undefined : 'button'}
-              tabIndex={isEditingTitle ? -1 : 0}
-              title={isEditingTitle ? undefined : 'Click to rename'}
-              onClick={
-                isEditingTitle
-                  ? undefined
-                  : () => {
-                      if (!selectedRecord) return
-                      setTitleDraft(selectedRecord.title)
-                      setIsEditingTitle(true)
-                    }
-              }
-              onKeyDown={
-                isEditingTitle
-                  ? undefined
-                  : (e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
+          <header
+            className="peel-window-drag flex h-9 shrink-0 items-center border-b border-[var(--border)] bg-[var(--panel)] px-4"
+            style={isTemporary && IS_MAC ? { paddingLeft: 80 } : undefined}
+          >
+            {isTemporary ? (
+              <span
+                className="peel-doc-title-text block min-w-0 truncate text-left"
+                style={{ maxWidth: '280px' }}
+              >
+                Temporary
+              </span>
+            ) : (
+              <div
+                className="peel-doc-title-shell cursor-text"
+                style={{ width: `${titleWidthCh}ch`, maxWidth: '280px' }}
+                role={isEditingTitle ? undefined : 'button'}
+                tabIndex={isEditingTitle ? -1 : 0}
+                title={isEditingTitle ? undefined : 'Click to rename'}
+                onClick={
+                  isEditingTitle
+                    ? undefined
+                    : () => {
                         if (!selectedRecord) return
                         setTitleDraft(selectedRecord.title)
                         setIsEditingTitle(true)
                       }
-                    }
-              }
-            >
-              {isEditingTitle ? (
-                <input
-                  autoFocus
-                  type="text"
-                  value={titleDraft}
-                  onChange={(e) => setTitleDraft(e.target.value)}
-                  onBlur={() => void handleTitleCommit()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void handleTitleCommit()
-                    if (e.key === 'Escape') setIsEditingTitle(false)
-                  }}
-                  className="peel-doc-title-text peel-doc-title-field min-w-0 flex-1 text-left"
-                  onClick={(e) => e.stopPropagation()}
-                />
-              ) : (
-                <span className="peel-doc-title-text block min-w-0 truncate text-left">
-                  {selectedRecord?.title ?? 'Untitled'}
-                </span>
-              )}
-            </div>
+                }
+                onKeyDown={
+                  isEditingTitle
+                    ? undefined
+                    : (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          if (!selectedRecord) return
+                          setTitleDraft(selectedRecord.title)
+                          setIsEditingTitle(true)
+                        }
+                      }
+                }
+              >
+                {isEditingTitle ? (
+                  <input
+                    autoFocus
+                    type="text"
+                    value={titleDraft}
+                    onChange={(e) => setTitleDraft(e.target.value)}
+                    onBlur={() => void handleTitleCommit()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void handleTitleCommit()
+                      if (e.key === 'Escape') setIsEditingTitle(false)
+                    }}
+                    className="peel-doc-title-text peel-doc-title-field min-w-0 flex-1 text-left"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <span className="peel-doc-title-text block min-w-0 truncate text-left">
+                    {selectedRecord?.title ?? 'Untitled'}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {isTemporary && (
+              <div className="peel-window-no-drag ml-auto flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={handleTempDiscard}>
+                  Discard
+                </Button>
+                <Button size="sm" onClick={() => void handleTempSave()}>
+                  Save
+                </Button>
+              </div>
+            )}
           </header>
 
           {/* ── Row 2, Col 1: Sidebar content ── */}
-          <aside
-            className="flex min-h-0 flex-col overflow-hidden border-r border-[var(--border)] bg-[var(--panel)]"
-            style={{ display: sidebarCollapsed ? 'none' : undefined }}
-          >
-            {!sidebarCollapsed && (
-              <>
-                <div className="px-3 pb-2 pt-2">
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[var(--muted-foreground)]" />
-                    <Input
-                      className="pl-8"
-                      placeholder="Search"
-                      value={searchText}
-                      onChange={(event) => setSearchText(event.target.value)}
-                    />
+          {!isTemporary && (
+            <aside
+              className="flex min-h-0 flex-col overflow-hidden border-r border-[var(--border)] bg-[var(--panel)]"
+              style={{ display: sidebarCollapsed ? 'none' : undefined }}
+            >
+              {!sidebarCollapsed && (
+                <>
+                  <div className="px-3 pb-2 pt-2">
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[var(--muted-foreground)]" />
+                      <Input
+                        className="pl-8"
+                        placeholder="Search"
+                        value={searchText}
+                        onChange={(event) => setSearchText(event.target.value)}
+                      />
+                    </div>
                   </div>
-                </div>
 
-                <ScrollArea className="min-h-0 flex-1 px-2 pb-2">
-                  <div className="space-y-1">
-                    {pinnedRecords.length ? (
+                  <ScrollArea className="min-h-0 flex-1 px-2 pb-2">
+                    <div className="space-y-1">
+                      {pinnedRecords.length ? (
+                        <HistorySection
+                          title="Pinned"
+                          records={pinnedRecords}
+                          selectedId={selectedId}
+                          onSelect={handleSelectRecord}
+                          onRename={(record) => {
+                            setRenameTarget(record)
+                            setRenameValue(record.title)
+                          }}
+                          onDelete={handleDeleteRecord}
+                          onTogglePin={handleTogglePin}
+                        />
+                      ) : null}
+
                       <HistorySection
-                        title="Pinned"
-                        records={pinnedRecords}
+                        title={pinnedRecords.length ? 'Recent' : 'History'}
+                        records={regularRecords}
                         selectedId={selectedId}
                         onSelect={handleSelectRecord}
                         onRename={(record) => {
@@ -1025,43 +1160,30 @@ export default function App(): React.JSX.Element {
                         onDelete={handleDeleteRecord}
                         onTogglePin={handleTogglePin}
                       />
-                    ) : null}
 
-                    <HistorySection
-                      title={pinnedRecords.length ? 'Recent' : 'History'}
-                      records={regularRecords}
-                      selectedId={selectedId}
-                      onSelect={handleSelectRecord}
-                      onRename={(record) => {
-                        setRenameTarget(record)
-                        setRenameValue(record.title)
-                      }}
-                      onDelete={handleDeleteRecord}
-                      onTogglePin={handleTogglePin}
-                    />
+                      {!filteredRecords.length ? (
+                        <div className="rounded-md border border-dashed border-[var(--border-strong)] px-4 py-6 text-center">
+                          <p className="text-sm text-[var(--muted)]">
+                            {searchText.length ? 'No matches found.' : 'No records yet.'}
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                  </ScrollArea>
 
-                    {!filteredRecords.length ? (
-                      <div className="rounded-md border border-dashed border-[var(--border-strong)] px-4 py-6 text-center">
-                        <p className="text-sm text-[var(--muted)]">
-                          {searchText.length ? 'No matches found.' : 'No records yet.'}
-                        </p>
-                      </div>
-                    ) : null}
+                  <div className="flex h-9 items-center border-t border-[var(--border)] bg-[var(--panel)] px-2.5">
+                    <button
+                      className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-sm text-[var(--muted)] transition hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)] hover:text-[var(--foreground)]"
+                      onClick={() => setSettingsOpen(true)}
+                    >
+                      <Settings className="size-3.5" />
+                      Settings
+                    </button>
                   </div>
-                </ScrollArea>
-
-                <div className="flex h-9 items-center border-t border-[var(--border)] bg-[var(--panel)] px-2.5">
-                  <button
-                    className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-sm text-[var(--muted)] transition hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)] hover:text-[var(--foreground)]"
-                    onClick={() => setSettingsOpen(true)}
-                  >
-                    <Settings className="size-3.5" />
-                    Settings
-                  </button>
-                </div>
-              </>
-            )}
-          </aside>
+                </>
+              )}
+            </aside>
+          )}
 
           {/* ── Row 2, Col 2: Main Editor Area — 宽度由父级 grid-template-columns 过渡；不要用 Framer layout(transform)，否则 Monaco 选区/光标会错位 */}
           <main
@@ -1228,7 +1350,11 @@ export default function App(): React.JSX.Element {
                       >
                         <AnimatePresence mode="wait" initial={false}>
                           <motion.span
-                            key={actionFeedback['result-format'] ? 'result-format-ok' : 'result-format-default'}
+                            key={
+                              actionFeedback['result-format']
+                                ? 'result-format-ok'
+                                : 'result-format-default'
+                            }
                             initial={{ opacity: 0, scale: 0.75, y: 2 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.75, y: -2 }}
@@ -1280,7 +1406,11 @@ export default function App(): React.JSX.Element {
                       >
                         <AnimatePresence mode="wait" initial={false}>
                           <motion.span
-                            key={actionFeedback['result-copy'] ? 'result-copy-ok' : 'result-copy-default'}
+                            key={
+                              actionFeedback['result-copy']
+                                ? 'result-copy-ok'
+                                : 'result-copy-default'
+                            }
                             initial={{ opacity: 0, scale: 0.75, y: 2 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.75, y: -2 }}

@@ -132,9 +132,73 @@ export function summarizeJson(input: string): JsonSummary {
   };
 }
 
+export function formatJsonInput(
+  input: string,
+  style: JsonFormatStyle,
+): { ok: true; output: string } | { ok: false; issue: JsonValidationIssue } {
+  const embedded = extractEmbeddedJson(input);
+  return formatJson(embedded ?? input, style);
+}
+
 export function formatPastedJson(input: string): string {
-  const formatted = formatJson(input, "pretty");
+  const embedded = extractEmbeddedJson(input);
+  const formatted = formatJson(embedded ?? input, "pretty");
   return formatted.ok ? formatted.output : input;
+}
+
+/**
+ * 检测被字符串化或反斜杠转义的 JSON 文本，并返回内层 JSON 源串。
+ * 仅在能可靠还原为对象/数组时才返回，避免误伤普通字符串。
+ */
+function extractEmbeddedJson(input: string): string | null {
+  const trimmed = input.trim();
+
+  if (!trimmed.length) {
+    return null;
+  }
+
+  const parsed = tryParseJson(trimmed);
+
+  if (!parsed.issue) {
+    // 形如 "{\"a\":1}" 的 JSON 字符串字面量，其内容本身是对象/数组。
+    if (typeof parsed.value === "string") {
+      const inner = tryParseJson(parsed.value.trim());
+
+      if (!inner.issue && isObjectOrArray(inner.value)) {
+        return JSON.stringify(inner.value);
+      }
+    }
+
+    return null;
+  }
+
+  // 形如 {\"a\":1} 的转义文本（缺少外层引号），尝试按字符串内容解码。
+  if (trimmed.includes('\\"')) {
+    const decoded = decodeJsonStringBody(trimmed);
+
+    if (decoded !== null) {
+      const inner = tryParseJson(decoded.trim());
+
+      if (!inner.issue && isObjectOrArray(inner.value)) {
+        return JSON.stringify(inner.value);
+      }
+    }
+  }
+
+  return null;
+}
+
+function decodeJsonStringBody(body: string): string | null {
+  try {
+    const decoded = JSON.parse(`"${body}"`);
+    return typeof decoded === "string" ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+function isObjectOrArray(value: unknown): boolean {
+  return typeof value === "object" && value !== null;
 }
 
 function detectRootType(value: unknown): JsonRootType {

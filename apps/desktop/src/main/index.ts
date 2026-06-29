@@ -6,7 +6,9 @@ import {
   globalShortcut,
   ipcMain,
   Menu,
-  shell
+  nativeImage,
+  shell,
+  Tray
 } from 'electron'
 import { readFile, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
@@ -41,6 +43,17 @@ const storage = new PeelStorage(
 let registeredQuickPasteShortcut = ''
 /** 应用菜单的 IPC 目标：hiddenInset 等场景下 getFocusedWindow() 可能为 null，需回退到主窗 */
 let peelMainBrowserWindow: BrowserWindow | null = null
+
+interface TempWindowState {
+  initialContent: string
+  dirty: boolean
+}
+
+/** 临时窗口运行态：key 为 webContents.id，记录预填内容与是否有未保存改动 */
+const tempWindowStates = new Map<number, TempWindowState>()
+
+/** 菜单栏/系统托盘图标；用模块级引用避免被 GC */
+let tray: Tray | null = null
 const windowReadiness = new WeakMap<
   BrowserWindow,
   {
@@ -135,6 +148,84 @@ function createWindow(): BrowserWindow {
   return mainWindow
 }
 
+function createTempWindow(initialContent: string): BrowserWindow {
+  const tempWindow = new BrowserWindow({
+    width: 820,
+    height: 620,
+    minWidth: 480,
+    minHeight: 360,
+    show: false,
+    title: 'Peel — Temporary',
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    backgroundColor: '#f0ede8',
+    ...(process.platform === 'linux' ? { icon } : {}),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      sandbox: true
+    }
+  })
+
+  // 缓存 id：'closed' 事件触发时 webContents 已销毁，再读取 .id 会抛 "Object has been destroyed"
+  const tempWindowId = tempWindow.webContents.id
+  tempWindowStates.set(tempWindowId, { initialContent, dirty: false })
+
+  tempWindow.on('ready-to-show', () => {
+    tempWindow.show()
+    tempWindow.focus()
+  })
+
+  tempWindow.webContents.setWindowOpenHandler((details) => {
+    void shell.openExternal(details.url)
+    return { action: 'deny' }
+  })
+
+  tempWindow.webContents.setZoomFactor(1)
+  if (typeof tempWindow.webContents.setVisualZoomLevelLimits === 'function') {
+    void tempWindow.webContents.setVisualZoomLevelLimits(1, 1).catch((error) => {
+      console.warn('Failed to lock visual zoom limits:', error)
+    })
+  }
+
+  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
+    void tempWindow.loadURL(`${process.env.ELECTRON_RENDERER_URL}#temp`)
+  } else {
+    void tempWindow.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'temp' })
+  }
+
+  tempWindow.on('close', (event) => {
+    const state = tempWindowStates.get(tempWindowId)
+
+    if (!state || !state.dirty) {
+      return
+    }
+
+    event.preventDefault()
+
+    const choice = dialog.showMessageBoxSync(tempWindow, {
+      type: 'warning',
+      buttons: ['Discard', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      title: 'Discard changes?',
+      message: 'Discard changes?',
+      detail: 'This temporary window has unsaved content. Closing it will discard the data.'
+    })
+
+    if (choice === 0) {
+      // 先从 map 删除，避免 'closed' 处理器或重复 close 再次操作已销毁窗口
+      tempWindowStates.delete(tempWindowId)
+      tempWindow.destroy()
+    }
+  })
+
+  tempWindow.on('closed', () => {
+    tempWindowStates.delete(tempWindowId)
+  })
+
+  return tempWindow
+}
+
 function registerIpcHandlers(): void {
   ipcMain.on(IPC_CHANNELS.rendererReady, (event) => {
     const window = BrowserWindow.fromWebContents(event.sender)
@@ -190,6 +281,29 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.clipboardWriteText, (_event, text: string) => {
     clipboard.writeText(text)
   })
+  ipcMain.handle(IPC_CHANNELS.tempGetInitialContent, (event) => {
+    return tempWindowStates.get(event.sender.id)?.initialContent ?? ''
+  })
+  ipcMain.on(IPC_CHANNELS.tempSetDirty, (event, dirty: boolean) => {
+    const state = tempWindowStates.get(event.sender.id)
+    if (state) {
+      state.dirty = dirty
+    }
+  })
+  ipcMain.handle(IPC_CHANNELS.tempCommit, async (event, seed: HistoryRecordSeed) => {
+    const { snapshot } = await storage.createRecord(seed)
+
+    if (peelMainBrowserWindow && !peelMainBrowserWindow.isDestroyed()) {
+      peelMainBrowserWindow.webContents.send(IPC_CHANNELS.snapshotUpdated, snapshot)
+    }
+
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+    if (senderWindow) {
+      // 先删除状态，destroy() 触发的 'closed' 处理器便不会再操作已销毁窗口
+      tempWindowStates.delete(event.sender.id)
+      senderWindow.destroy()
+    }
+  })
 }
 
 app.whenReady().then(() => {
@@ -208,6 +322,7 @@ app.whenReady().then(() => {
     null
 
   createWindow()
+  createTray()
   Menu.setApplicationMenu(buildAppMenu(getMenuTargetWindow, is.dev))
   void storage.bootstrap().then((snapshot) => {
     registerQuickPasteShortcut(snapshot.settings.quickPasteShortcut)
@@ -230,6 +345,61 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll()
 })
 
+function handleQuickPasteTrigger(): void {
+  createTempWindow(clipboard.readText())
+}
+
+function openMainWindow(): void {
+  const mainWindow =
+    peelMainBrowserWindow && !peelMainBrowserWindow.isDestroyed()
+      ? peelMainBrowserWindow
+      : createWindow()
+
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore()
+  }
+
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function createTray(): void {
+  if (tray) {
+    return
+  }
+
+  const trayImage = nativeImage.createFromPath(icon).resize({ width: 18, height: 18 })
+  if (process.platform === 'darwin') {
+    trayImage.setTemplateImage(true)
+  }
+
+  tray = new Tray(trayImage)
+  tray.setToolTip('Peel')
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Open Main Window',
+      click: () => openMainWindow()
+    },
+    {
+      label: 'New Temporary Window',
+      click: () => handleQuickPasteTrigger()
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit Peel',
+      click: () => app.quit()
+    }
+  ])
+
+  tray.setContextMenu(contextMenu)
+
+  // 非 macOS 下左键单击直接打开主窗口（macOS 单击默认弹出菜单）
+  if (process.platform !== 'darwin') {
+    tray.on('click', () => openMainWindow())
+  }
+}
+
 function registerQuickPasteShortcut(accelerator: string): boolean {
   const normalized = accelerator.trim()
   const previousShortcut = registeredQuickPasteShortcut
@@ -244,17 +414,7 @@ function registerQuickPasteShortcut(accelerator: string): boolean {
   }
 
   try {
-    const registered = globalShortcut.register(normalized, () => {
-      const mainWindow = ensureMainWindow()
-
-      if (mainWindow.isMinimized()) {
-        mainWindow.restore()
-      }
-
-      mainWindow.show()
-      mainWindow.focus()
-      sendMenuAction(mainWindow, 'new-json-from-clipboard')
-    })
+    const registered = globalShortcut.register(normalized, handleQuickPasteTrigger)
 
     if (registered) {
       registeredQuickPasteShortcut = normalized
@@ -262,17 +422,7 @@ function registerQuickPasteShortcut(accelerator: string): boolean {
     }
 
     if (previousShortcut) {
-      const rollbackRegistered = globalShortcut.register(previousShortcut, () => {
-        const mainWindow = ensureMainWindow()
-
-        if (mainWindow.isMinimized()) {
-          mainWindow.restore()
-        }
-
-        mainWindow.show()
-        mainWindow.focus()
-        sendMenuAction(mainWindow, 'new-json-from-clipboard')
-      })
+      const rollbackRegistered = globalShortcut.register(previousShortcut, handleQuickPasteTrigger)
 
       if (rollbackRegistered) {
         registeredQuickPasteShortcut = previousShortcut
@@ -282,17 +432,7 @@ function registerQuickPasteShortcut(accelerator: string): boolean {
     console.error('Failed to register quick paste shortcut:', error)
 
     if (previousShortcut) {
-      const rollbackRegistered = globalShortcut.register(previousShortcut, () => {
-        const mainWindow = ensureMainWindow()
-
-        if (mainWindow.isMinimized()) {
-          mainWindow.restore()
-        }
-
-        mainWindow.show()
-        mainWindow.focus()
-        sendMenuAction(mainWindow, 'new-json-from-clipboard')
-      })
+      const rollbackRegistered = globalShortcut.register(previousShortcut, handleQuickPasteTrigger)
 
       if (rollbackRegistered) {
         registeredQuickPasteShortcut = previousShortcut
@@ -301,27 +441,6 @@ function registerQuickPasteShortcut(accelerator: string): boolean {
   }
 
   return false
-}
-
-function ensureMainWindow(): BrowserWindow {
-  const existingWindow = BrowserWindow.getAllWindows()[0]
-
-  if (existingWindow) {
-    return existingWindow
-  }
-
-  return createWindow()
-}
-
-function sendMenuAction(window: BrowserWindow, action: 'new-json-from-clipboard'): void {
-  if (window.webContents.isLoadingMainFrame()) {
-    window.webContents.once('did-finish-load', () => {
-      window.webContents.send(IPC_CHANNELS.menuAction, action)
-    })
-    return
-  }
-
-  window.webContents.send(IPC_CHANNELS.menuAction, action)
 }
 
 async function openJsonFile(): Promise<{ path: string; title: string; content: string } | null> {

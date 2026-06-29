@@ -7,8 +7,10 @@ import { configureMonaco } from './lib/monaco'
 
 configureMonaco()
 
+const mode = window.location.hash === '#temp' ? 'temporary' : 'main'
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <App mode={mode} />
   </StrictMode>
 )

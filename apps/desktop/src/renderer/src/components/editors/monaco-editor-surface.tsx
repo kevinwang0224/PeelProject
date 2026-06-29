@@ -216,27 +216,37 @@ export function MonacoEditorSurface({
       onBlur?.()
     })
 
-    const domNode = editor.getDomNode()
-
-    const handlePaste = (event: ClipboardEvent): void => {
+    /*
+     * 让 Monaco 正常完成粘贴（插入原始文本）后，再用 onDidPaste 拿到被插入的范围，
+     * 对该范围内容做 transformPaste（格式化/去转义）并原地替换。相比拦截 DOM paste
+     * 事件，这条路径由 Monaco 自身触发，跨 Electron/Monaco 版本更可靠。
+     */
+    editor.onDidPaste((pasteEvent) => {
       if (!transformPaste || readOnly) {
         return
       }
 
-      const pastedText = event.clipboardData?.getData('text/plain')
+      const model = editor.getModel()
 
-      if (typeof pastedText !== 'string' || !pastedText.length) {
+      if (!model) {
         return
       }
 
-      event.preventDefault()
-      stableHandleRef.current.pasteText(pastedText)
-    }
+      const pastedText = model.getValueInRange(pasteEvent.range)
 
-    domNode?.addEventListener('paste', handlePaste, true)
+      if (!pastedText.length) {
+        return
+      }
 
-    editor.onDidDispose(() => {
-      domNode?.removeEventListener('paste', handlePaste, true)
+      const nextText = transformPaste(pastedText)
+
+      if (nextText === pastedText) {
+        return
+      }
+
+      editor.executeEdits('peel-format-paste', [
+        { range: pasteEvent.range, text: nextText, forceMoveMarkers: true }
+      ])
     })
 
     editor.onDidLayoutChange(() => {
